@@ -1,79 +1,84 @@
 """
-Peg — hand-runnable entrypoint for Phase 2.
+Peg — daily forecast entrypoint.
 
-Usage:
-    python run.py
+Fetch → score → format → notify (Telegram) → log (CSV).
 
-Fetches today's forecast, scores it, and prints the verdict to stdout.
-Telegram delivery comes in Phase 3.
+Environment variables (set as GitHub Actions secrets in production;
+omit locally to print-only mode):
+  TELEGRAM_TOKEN    — bot token
+  TELEGRAM_CHAT_ID  — recipient chat ID
 """
 
 from __future__ import annotations
 
+import os
 import sys
+from datetime import date, timezone
 
 import config
 from fetch import FetchError, fetch_forecast
-from scorer import Band, ScoreResult, WindowConfig, score
+from log import append_prediction
+from messages import format_message
+from notify import NotifyError, send
+from scorer import WindowConfig, score
 
 
 def main() -> None:
     print("Peg is checking the forecast…")
 
+    # --- Fetch -----------------------------------------------------------
     try:
         hours, dusk_hour = fetch_forecast(config.LAT, config.LON, config.TIMEZONE)
     except FetchError as exc:
-        print(f"\nPeg's drawn a blank — {exc}")
-        print("No verdict rather than a bad one. Back tomorrow.")
-        sys.exit(1)
+        _fail(f"Fetch failed: {exc}")
 
+    # --- Score -----------------------------------------------------------
     cfg = WindowConfig(
         hang_hour=config.HANG_HOUR,
         bring_in_hour=config.BRING_IN_HOUR,
         dusk_hour=dusk_hour,
     )
     result = score(hours, cfg)
-    _print_verdict(result)
 
+    # --- Format ----------------------------------------------------------
+    message = format_message(result, config.HANG_HOUR, config.BRING_IN_HOUR, dusk_hour, hours)
+    print(message)
 
-def _fmt_hour(h: int) -> str:
-    return f"{h:02d}:00"
+    # --- Notify ----------------------------------------------------------
+    token   = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
-
-def _print_verdict(result: ScoreResult) -> None:
-    sep = "─" * 44
-
-    if result.skipped:
-        print(f"\n{sep}")
-        print("  Peg's drawn a blank.")
-        print(f"  {result.reason}")
-        print(sep)
-        return
-
-    print(f"\n{sep}")
-
-    if result.override:
-        print("  ⚠  Risky bring-in")
-        print(f"  {result.reason}")
+    if token and chat_id:
+        try:
+            send(message, token, chat_id)
+            print("Telegram: sent.")
+        except NotifyError as exc:
+            # Delivery failure is logged but doesn't abort the log step.
+            print(f"Telegram: failed — {exc}", file=sys.stderr)
     else:
-        print(f"  {result.band.value}")
+        print("Telegram: TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping send.")
 
-    print(f"  Score: {result.display_score}/100  (raw {result.raw_score:.1f})")
-    print(f"  Towels will dry: {'yes' if result.will_dry else 'no'}")
+    # --- Log -------------------------------------------------------------
+    today = date.today()
+    append_prediction(today, result, cfg, hours)
+    print(f"Log: row written for {today}.")
 
-    if not result.override:
-        print(f"  {result.reason}")
 
-    if result.best_window:
-        start, end = result.best_window
-        print(f"  Best window: {_fmt_hour(start)} – {_fmt_hour(end)}")
-    else:
-        print("  No contiguous window reaches the drying target today.")
-
-    if result.gust_flag:
-        print("  ⚠  Gusts >32 mph in window — washing may not be safe outside.")
-
-    print(sep)
+def _fail(reason: str) -> None:
+    """Send a failure ping if credentials are available, then exit non-zero."""
+    print(f"\nPeg's drawn a blank — {reason}", file=sys.stderr)
+    token   = os.environ.get("TELEGRAM_TOKEN")
+    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    if token and chat_id:
+        try:
+            send(
+                "<b>Peg's drawn a blank today</b> — couldn't get a clean read, "
+                "so no verdict rather than a bad one. Back tomorrow.",
+                token, chat_id,
+            )
+        except NotifyError:
+            pass
+    sys.exit(1)
 
 
 if __name__ == "__main__":
