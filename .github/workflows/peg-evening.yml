@@ -1,0 +1,30 @@
+name: Peg — evening outcome prompt
+
+on:
+  schedule:
+    # 18:30 UTC — 19:30 BST (summer) / 18:30 GMT (winter).
+    # After the 18:00 bring-in time, giving the washing time to be assessed.
+    - cron: '30 18 * * *'
+  workflow_dispatch:
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  evening-prompt:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Send evening outcome prompt
+        env:
+          TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python evening.py
