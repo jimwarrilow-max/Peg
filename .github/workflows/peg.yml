@@ -39,5 +39,10 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add log.csv
-          git diff --staged --quiet || git commit -m "log: $(date -u +%Y-%m-%d) prediction"
-          git diff HEAD~1 --quiet 2>/dev/null || git push
+          if git diff --staged --quiet; then
+            echo "Log unchanged — nothing to commit."
+          else
+            git commit -m "log: $(date -u +%Y-%m-%d) prediction"
+            git pull --rebase
+            git push
+          fi
