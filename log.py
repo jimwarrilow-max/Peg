@@ -90,6 +90,40 @@ def append_prediction(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def write_outcome(
+    date_str: str,
+    outcome: str,
+    log_path: str = LOG_PATH,
+) -> bool:
+    """
+    Write `outcome` into the row for `date_str`.
+    Returns True if the row was found and updated, False otherwise.
+    """
+    if not os.path.isfile(log_path):
+        return False
+
+    rows: list[dict] = []
+    fieldnames: list[str] = []
+    found = False
+
+    with open(log_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        fieldnames = list(reader.fieldnames or _COLUMNS)
+        for row in reader:
+            if row.get("date") == date_str:
+                row["outcome"] = outcome
+                found = True
+            rows.append(row)
+
+    if found:
+        with open(log_path, "w", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            writer.writerows(rows)
+
+    return found
+
+
 def _row_exists(log_path: str, date_str: str) -> bool:
     if not os.path.isfile(log_path):
         return False
