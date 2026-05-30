@@ -2,10 +2,10 @@ name: Peg — morning forecast
 
 on:
   schedule:
-    # 07:45 UTC — arrives at 08:45 BST (summer) or 07:45 GMT (winter),
+    # 06:45 UTC — arrives at 06:45 GMT (winter) or 07:45 BST (summer),
     # both comfortably before the 9am hang time.
     # Off the top of the hour to avoid GitHub Actions peak-load delays.
-    - cron: '45 7 * * *'
+    - cron: '45 6 * * *'
   workflow_dispatch:   # manual "Run now" from the Actions tab
 
 env:
