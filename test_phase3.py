@@ -100,8 +100,25 @@ class TestFormatMessage:
                 precip_mm=0.0, precip_prob_pct=80.0,
             )
         msg = format_message(_result(override=True, band=Band.MARGINAL), 9, 18, 21, hours)
-        assert "waving you off" in msg.lower()
+        assert "cautious" in msg.lower()
         assert "⚠" in msg
+
+    def test_override_shows_score(self):
+        hours = _hours()
+        hours[17] = HourForecast(
+            hour=17, temp_c=18.0, rh_pct=70.0,
+            vpd_kpa=0.5, wind_mph=5.0, solar_wm2=100.0,
+            precip_mm=0.0, precip_prob_pct=80.0,
+        )
+        msg = format_message(_result(override=True, raw_score=65.0, band=Band.MARGINAL), 9, 18, 21, hours)
+        assert "65" in msg
+
+    def test_conditions_line_present(self):
+        """All non-skipped messages include temperature, wind, and humidity."""
+        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21, _hours())
+        assert "°C" in msg
+        assert "mph" in msg
+        assert "humidity" in msg
 
     def test_override_never_shows_good_band(self):
         """INV-07 reflected in the message: override → no 'Good drying day' wording."""
