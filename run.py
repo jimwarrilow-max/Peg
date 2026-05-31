@@ -5,8 +5,9 @@ Fetch → score → format → notify (Telegram) → log (CSV).
 
 Environment variables (set as GitHub Actions secrets in production;
 omit locally to print-only mode):
-  TELEGRAM_TOKEN    — bot token
-  TELEGRAM_CHAT_ID  — recipient chat ID
+  TELEGRAM_TOKEN     — bot token
+  TELEGRAM_CHAT_ID   — primary recipient chat ID
+  TELEGRAM_CHAT_ID_2 — optional second recipient chat ID
 """
 
 from __future__ import annotations
@@ -45,16 +46,16 @@ def main() -> None:
     print(message)
 
     # --- Notify ----------------------------------------------------------
-    token   = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    token    = os.environ.get("TELEGRAM_TOKEN")
+    chat_ids = _chat_ids()
 
-    if token and chat_id:
-        try:
-            send(message, token, chat_id)
-            print("Telegram: sent.")
-        except NotifyError as exc:
-            # Delivery failure is logged but doesn't abort the log step.
-            print(f"Telegram: failed — {exc}", file=sys.stderr)
+    if token and chat_ids:
+        for chat_id in chat_ids:
+            try:
+                send(message, token, chat_id)
+                print(f"Telegram: sent to {chat_id}.")
+            except NotifyError as exc:
+                print(f"Telegram: failed for {chat_id} — {exc}", file=sys.stderr)
     else:
         print("Telegram: TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping send.")
 
@@ -64,20 +65,30 @@ def main() -> None:
     print(f"Log: row written for {tomorrow}.")
 
 
+def _chat_ids() -> list[str]:
+    """Return a list of configured chat IDs (primary + optional second)."""
+    ids = []
+    for key in ("TELEGRAM_CHAT_ID", "TELEGRAM_CHAT_ID_2"):
+        val = os.environ.get(key, "").strip()
+        if val:
+            ids.append(val)
+    return ids
+
+
 def _fail(reason: str) -> None:
     """Send a failure ping if credentials are available, then exit non-zero."""
     print(f"\nPeg's drawn a blank — {reason}", file=sys.stderr)
-    token   = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
-    if token and chat_id:
-        try:
-            send(
-                "<b>Peg's drawn a blank today</b> — couldn't get a clean read, "
-                "so no verdict rather than a bad one. Back tomorrow.",
-                token, chat_id,
-            )
-        except NotifyError:
-            pass
+    token = os.environ.get("TELEGRAM_TOKEN")
+    for chat_id in _chat_ids():
+        if token:
+            try:
+                send(
+                    "<b>Peg's drawn a blank</b> — couldn't get a clean read on tomorrow, "
+                    "so no verdict rather than a bad one. Back tomorrow evening.",
+                    token, chat_id,
+                )
+            except NotifyError:
+                pass
     sys.exit(1)
 
 
