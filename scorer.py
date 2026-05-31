@@ -68,6 +68,7 @@ class HourForecast:
     precip_mm: Optional[float]         # mm/h
     precip_prob_pct: Optional[float]   # 0–100
     wind_gust_mph: Optional[float] = None   # for gust flag only; not scored
+    uv_index: Optional[float] = None        # display only; not used in scoring
 
 
 @dataclass

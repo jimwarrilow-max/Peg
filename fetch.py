@@ -34,6 +34,7 @@ _HOURLY_FIELDS = [
     "precipitation",
     "precipitation_probability",
     "et0_fao_evapotranspiration",  # fetched & reserved; not used by scorer yet
+    "uv_index",
 ]
 
 
@@ -98,6 +99,7 @@ def transform(data: dict) -> tuple[list[HourForecast], int]:
             precip_mm=_at(hourly, "precipitation", i),
             precip_prob_pct=_at(hourly, "precipitation_probability", i),
             wind_gust_mph=_at(hourly, "wind_gusts_10m", i),
+            uv_index=_at(hourly, "uv_index", i),
         ))
 
     return hours, dusk_hour
