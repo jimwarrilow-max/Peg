@@ -16,10 +16,13 @@ from notify import NotifyError, send_with_keyboard
 
 
 def main() -> None:
-    token   = os.environ.get("TELEGRAM_TOKEN")
-    chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+    token    = os.environ.get("TELEGRAM_TOKEN")
+    chat_ids = [
+        v for k in ("TELEGRAM_CHAT_ID", "TELEGRAM_CHAT_ID_2")
+        if (v := os.environ.get(k, "").strip())
+    ]
 
-    if not token or not chat_id:
+    if not token or not chat_ids:
         print("TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping.")
         return
 
@@ -29,16 +32,17 @@ def main() -> None:
         {"text": "👎 Still damp", "callback_data": f"damp:{today}"},
     ]]
 
-    try:
-        send_with_keyboard(
-            "<b>Evening! How'd I do — did it dry?</b>\n"
-            "Honest answers make me sharper.",
-            keyboard, token, chat_id,
-        )
-        print("Evening prompt sent.")
-    except NotifyError as exc:
-        print(f"Failed to send evening prompt: {exc}", file=sys.stderr)
-        sys.exit(1)
+    for chat_id in chat_ids:
+        try:
+            send_with_keyboard(
+                "<b>Evening! How'd I do — did it dry?</b>\n"
+                "Honest answers make me sharper.",
+                keyboard, token, chat_id,
+            )
+            print(f"Evening prompt sent to {chat_id}.")
+        except NotifyError as exc:
+            print(f"Failed to send evening prompt to {chat_id}: {exc}", file=sys.stderr)
+            sys.exit(1)
 
 
 if __name__ == "__main__":
