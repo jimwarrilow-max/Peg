@@ -50,6 +50,22 @@ def _peak_uv_line(hours: list[HourForecast], hang_hour: int, bring_in_hour: int,
     return f"\n☀️ UV index: {peak:.0f} ({_uv_label(peak)})"
 
 
+def _conditions_line(hours: list[HourForecast], hang_hour: int, end_hour: int) -> str:
+    """One-line summary of mean conditions over hang_hour..end_hour (inclusive)."""
+    window = [h for h in hours if hang_hour <= h.hour <= end_hour]
+    parts = []
+    temps = [h.temp_c  for h in window if h.temp_c  is not None]
+    winds = [h.wind_mph for h in window if h.wind_mph is not None]
+    rhs   = [h.rh_pct   for h in window if h.rh_pct   is not None]
+    if temps:
+        parts.append(f"🌡️ {round(sum(temps)/len(temps))}°C")
+    if winds:
+        parts.append(f"💨 {round(sum(winds)/len(winds))}mph")
+    if rhs:
+        parts.append(f"💧 {round(sum(rhs)/len(rhs))}% humidity")
+    return ("\n" + " · ".join(parts)) if parts else ""
+
+
 def format_message(
     result: ScoreResult,
     hang_hour: int,
@@ -67,26 +83,31 @@ def format_message(
     score = result.display_score
     hang_str = _fmt_hour(hang_hour)
 
+    window_end = min(bring_in_hour, dusk_hour)
     uv_line = _peak_uv_line(hours, hang_hour, bring_in_hour, dusk_hour)
 
     if result.override:
         rain_hour = _first_late_rain_hour(hours, bring_in_hour, dusk_hour)
         rain_str = _fmt_hour(rain_hour) if rain_hour is not None else "later"
+        good_end = (rain_hour - 1) if rain_hour is not None else window_end
+        cond = _conditions_line(hours, hang_hour, good_end)
         return (
-            f"⚠️ <b>Peg's waving you off.</b> Lovely till {rain_str}, then rain "
-            f"before you'd get it down. Tempting — it's a trap. Sit this one out."
-            f"{uv_line}"
+            f"⚠️ <b>Peg's cautious — {score}/100.</b> Good drying till {rain_str}, "
+            f"then rain before bring-in time. Fine if you're home to dash it in early "
+            f"— risky if you're out all day."
+            f"{cond}{uv_line}"
         )
 
-    end_hour = result.best_window[1] if result.best_window else min(bring_in_hour, dusk_hour)
+    end_hour = result.best_window[1] if result.best_window else window_end
     dry_by_str = _fmt_hour(end_hour)
+    cond = _conditions_line(hours, hang_hour, window_end)
 
     if result.band == Band.CRACK:
         gloat = _GLOAT_LINE if _is_cold(hours, hang_hour, bring_in_hour, dusk_hour) else ""
         return (
             f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
             f"Out by {hang_str} and it'll be crisp by {dry_by_str}.{gloat}"
-            f"{uv_line}"
+            f"{cond}{uv_line}"
         )
 
     if result.band == Band.GOOD:
@@ -94,7 +115,7 @@ def format_message(
             f"🧺 <b>Peg's verdict: {score}/100. A solid one.</b> "
             f"Out by {hang_str}, in by {dry_by_str}. "
             f"Won't break records, but it'll get the job done."
-            f"{uv_line}"
+            f"{cond}{uv_line}"
         )
 
     if result.band == Band.MARGINAL:
@@ -102,7 +123,7 @@ def format_message(
             f"🧺 <b>Peg's on the fence — {score}/100.</b> "
             f"It'll <i>probably</i> dry if you're about to dash it in, "
             f"but the heavy stuff might sulk. I'd risk a light load, not the towels."
-            f"{uv_line}"
+            f"{cond}{uv_line}"
         )
 
     # Band.TUMBLE
@@ -110,7 +131,7 @@ def format_message(
         f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
         f"Air'll be too damp to take anything off your hands. "
         f"Tumble dryer, or hold on."
-        f"{uv_line}"
+        f"{cond}{uv_line}"
     )
 
 
