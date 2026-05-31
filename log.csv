@@ -1,2 +1,3 @@
 date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,override,gust_flag,skipped,best_window,mean_temp_c,mean_rh_pct,mean_vpd_kpa,mean_wind_mph,mean_solar_wm2,outcome
 2026-05-30,9,18,21,100.0,100,Crack open the pegs,True,False,False,False,09:00-13:00,21.67,39.8,1.587,4.4,658.2,
+2026-05-31,9,18,21,95.92,95,Crack open the pegs,True,False,False,False,09:00-15:00,17.59,60.8,0.803,10.53,348.9,
