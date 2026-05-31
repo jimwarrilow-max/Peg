@@ -103,8 +103,8 @@ class TestFormatMessage:
         assert "cautious" in msg.lower()
         assert "⚠" in msg
 
-    def test_override_tumble_shows_tumble_not_override(self):
-        """Override + TUMBLE band → show tumble message, not the misleading override warning."""
+    def test_override_tumble_shows_tumble_with_rain_info(self):
+        """Override + TUMBLE → tumble message that still mentions the rain timing and shows score."""
         hours = _hours()
         hours[17] = HourForecast(
             hour=17, temp_c=15.0, rh_pct=90.0,
@@ -114,6 +114,8 @@ class TestFormatMessage:
         msg = format_message(_result(override=True, raw_score=2.0, band=Band.TUMBLE, will_dry=False), 9, 18, 21, hours)
         assert "cautious" not in msg.lower()
         assert "don't bother" in msg.lower()
+        assert "0" in msg           # score shown
+        assert "rain" in msg.lower()  # rain mentioned
 
     def test_override_shows_score(self):
         hours = _hours()

@@ -86,9 +86,17 @@ def format_message(
     window_end = min(bring_in_hour, dusk_hour)
     uv_line = _peak_uv_line(hours, hang_hour, bring_in_hour, dusk_hour)
 
-    if result.override and result.band != Band.TUMBLE:
+    if result.override:
         rain_hour = _first_late_rain_hour(hours, bring_in_hour, dusk_hour)
         rain_str = _fmt_hour(rain_hour) if rain_hour is not None else "later"
+        if result.band == Band.TUMBLE:
+            cond = _conditions_line(hours, hang_hour, window_end)
+            return (
+                f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
+                f"Air'll be too damp to dry anything — and rain arrives at {rain_str} "
+                f"before bring-in time anyway."
+                f"{cond}{uv_line}"
+            )
         good_end = (rain_hour - 1) if rain_hour is not None else window_end
         cond = _conditions_line(hours, hang_hour, good_end)
         return (
