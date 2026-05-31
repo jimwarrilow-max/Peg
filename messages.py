@@ -21,6 +21,34 @@ from scorer import (
 _COLD_GLOAT_THRESHOLD_C = 15.0   # mean window temp below which Peg gloats
 _GLOAT_LINE = " Nippy, isn't it? Cold, dry and breezy beats warm and muggy every time."
 
+_UV_LABELS = [
+    (0,   "Low"),
+    (3,   "Moderate"),
+    (6,   "High"),
+    (8,   "Very High"),
+    (11,  "Extreme"),
+]
+
+
+def _uv_label(uv: float) -> str:
+    label = _UV_LABELS[0][1]
+    for threshold, name in _UV_LABELS:
+        if uv >= threshold:
+            label = name
+    return label
+
+
+def _peak_uv_line(hours: list[HourForecast], hang_hour: int, bring_in_hour: int, dusk_hour: int) -> str:
+    end_hour = min(bring_in_hour, dusk_hour)
+    uv_vals = [
+        h.uv_index for h in hours
+        if hang_hour <= h.hour <= end_hour and h.uv_index is not None
+    ]
+    if not uv_vals:
+        return ""
+    peak = max(uv_vals)
+    return f"\n☀️ UV index: {peak:.0f} ({_uv_label(peak)})"
+
 
 def format_message(
     result: ScoreResult,
@@ -32,12 +60,14 @@ def format_message(
     """Return a Telegram-HTML-formatted verdict string."""
     if result.skipped:
         return (
-            "<b>Peg's drawn a blank today</b> — couldn't get a clean read, "
-            "so no verdict rather than a bad one. Back tomorrow."
+            "<b>Peg's drawn a blank</b> — couldn't get a clean read on tomorrow, "
+            "so no verdict rather than a bad one. Back tomorrow evening."
         )
 
     score = result.display_score
     hang_str = _fmt_hour(hang_hour)
+
+    uv_line = _peak_uv_line(hours, hang_hour, bring_in_hour, dusk_hour)
 
     if result.override:
         rain_hour = _first_late_rain_hour(hours, bring_in_hour, dusk_hour)
@@ -45,6 +75,7 @@ def format_message(
         return (
             f"⚠️ <b>Peg's waving you off.</b> Lovely till {rain_str}, then rain "
             f"before you'd get it down. Tempting — it's a trap. Sit this one out."
+            f"{uv_line}"
         )
 
     end_hour = result.best_window[1] if result.best_window else min(bring_in_hour, dusk_hour)
@@ -53,8 +84,9 @@ def format_message(
     if result.band == Band.CRACK:
         gloat = _GLOAT_LINE if _is_cold(hours, hang_hour, bring_in_hour, dusk_hour) else ""
         return (
-            f"🧺 <b>Peg here. Today's a belter — {score}/100.</b> "
+            f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
             f"Out by {hang_str} and it'll be crisp by {dry_by_str}.{gloat}"
+            f"{uv_line}"
         )
 
     if result.band == Band.GOOD:
@@ -62,6 +94,7 @@ def format_message(
             f"🧺 <b>Peg's verdict: {score}/100. A solid one.</b> "
             f"Out by {hang_str}, in by {dry_by_str}. "
             f"Won't break records, but it'll get the job done."
+            f"{uv_line}"
         )
 
     if result.band == Band.MARGINAL:
@@ -69,13 +102,15 @@ def format_message(
             f"🧺 <b>Peg's on the fence — {score}/100.</b> "
             f"It'll <i>probably</i> dry if you're about to dash it in, "
             f"but the heavy stuff might sulk. I'd risk a light load, not the towels."
+            f"{uv_line}"
         )
 
     # Band.TUMBLE
     return (
-        f"🧺 <b>Peg says don't bother. {score}/100.</b> "
-        f"Air's too damp to take anything off your hands today. "
-        f"Tumble dryer, or wait for tomorrow."
+        f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
+        f"Air'll be too damp to take anything off your hands. "
+        f"Tumble dryer, or hold on."
+        f"{uv_line}"
     )
 
 

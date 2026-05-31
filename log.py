@@ -31,6 +31,7 @@ _COLUMNS = [
     "raw_score", "display_score", "band", "will_dry", "override",
     "gust_flag", "skipped", "best_window",
     "mean_temp_c", "mean_rh_pct", "mean_vpd_kpa", "mean_wind_mph", "mean_solar_wm2",
+    "max_uv_index",
     "outcome",
 ]
 
@@ -75,6 +76,7 @@ def append_prediction(
         "mean_vpd_kpa":  stats["mean_vpd_kpa"],
         "mean_wind_mph": stats["mean_wind_mph"],
         "mean_solar_wm2": stats["mean_solar_wm2"],
+        "max_uv_index":  stats["max_uv_index"],
         "outcome":       "",
     }
 
@@ -140,10 +142,12 @@ def _mean(values: list[float]) -> Optional[float]:
 def _window_stats(hours: list[HourForecast], config: WindowConfig) -> dict:
     end_hour = min(config.bring_in_hour, config.dusk_hour)
     window = [h for h in hours if config.hang_hour <= h.hour <= end_hour]
+    uv_vals = [h.uv_index for h in window if h.uv_index is not None]
     return {
         "mean_temp_c":    _mean([h.temp_c    for h in window]),
         "mean_rh_pct":    _mean([h.rh_pct    for h in window]),
         "mean_vpd_kpa":   _mean([h.vpd_kpa   for h in window]),
         "mean_wind_mph":  _mean([h.wind_mph   for h in window]),
         "mean_solar_wm2": _mean([h.solar_wm2  for h in window]),
+        "max_uv_index":   round(max(uv_vals), 1) if uv_vals else None,
     }

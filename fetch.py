@@ -33,7 +33,8 @@ _HOURLY_FIELDS = [
     "shortwave_radiation",
     "precipitation",
     "precipitation_probability",
-    "et0_fao_evapotranspiration",  # fetched & reserved; not used by scorer yet
+    "et0_fao_evapotranspiration",
+    "uv_index",
 ]
 
 
@@ -46,16 +47,19 @@ class FetchError(Exception):
 # ---------------------------------------------------------------------------
 
 def fetch_forecast(lat: float, lon: float, timezone: str = "Europe/London") -> tuple[list[HourForecast], int]:
-    """Return (hours, dusk_hour) for today at the given location."""
+    """Return (hours, dusk_hour) for tomorrow at the given location."""
     data = _fetch_raw(lat, lon, timezone)
-    return transform(data)
+    return transform(data, day_index=1)
 
 
-def transform(data: dict) -> tuple[list[HourForecast], int]:
+def transform(data: dict, day_index: int = 0) -> tuple[list[HourForecast], int]:
     """
     Convert a raw Open-Meteo response dict into (hours, dusk_hour).
 
-    hours     — one HourForecast per hour of today (indices 0–23);
+    day_index — 0 = first day in the response, 1 = second day (tomorrow when
+                forecast_days=2).
+
+    hours     — one HourForecast per hour of the target day (hour field 0–23);
                 vpd_kpa is computed from temp+RH, or None if either is missing.
     dusk_hour — floor of the sunset hour (for WindowConfig.dusk_hour).
 
@@ -63,7 +67,7 @@ def transform(data: dict) -> tuple[list[HourForecast], int]:
     """
     # --- Dusk hour ----------------------------------------------------------
     try:
-        sunset_str: str = data["daily"]["sunset"][0]   # e.g. "2026-05-30T21:15"
+        sunset_str: str = data["daily"]["sunset"][day_index]
         dusk_hour = int(sunset_str[11:13])
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         raise FetchError(f"Could not parse sunset from response: {exc}") from exc
@@ -74,11 +78,13 @@ def transform(data: dict) -> tuple[list[HourForecast], int]:
     n = _array_length(hourly)
     if n == 0:
         raise FetchError("Hourly arrays are missing or empty.")
-    if n < 24:
-        raise FetchError(f"Expected ≥24 hourly entries, got {n}.")
+    required = (day_index + 1) * 24
+    if n < required:
+        raise FetchError(f"Expected ≥{required} hourly entries, got {n}.")
 
     hours: list[HourForecast] = []
-    for i in range(24):
+    start = day_index * 24
+    for i in range(start, start + 24):
         temp_c = _at(hourly, "temperature_2m", i)
         rh_pct = _at(hourly, "relative_humidity_2m", i)
 
@@ -89,7 +95,7 @@ def transform(data: dict) -> tuple[list[HourForecast], int]:
             vpd_kpa = None
 
         hours.append(HourForecast(
-            hour=i,
+            hour=i - start,
             temp_c=temp_c,
             rh_pct=rh_pct,
             vpd_kpa=vpd_kpa,
@@ -98,6 +104,7 @@ def transform(data: dict) -> tuple[list[HourForecast], int]:
             precip_mm=_at(hourly, "precipitation", i),
             precip_prob_pct=_at(hourly, "precipitation_probability", i),
             wind_gust_mph=_at(hourly, "wind_gusts_10m", i),
+            uv_index=_at(hourly, "uv_index", i),
         ))
 
     return hours, dusk_hour
@@ -115,7 +122,7 @@ def _fetch_raw(lat: float, lon: float, timezone: str) -> dict:
         "daily": "sunrise,sunset",
         "wind_speed_unit": "mph",
         "timezone": timezone,
-        "forecast_days": "1",
+        "forecast_days": "2",
     }
     url = OPEN_METEO_URL + "?" + urllib.parse.urlencode(params)
 
