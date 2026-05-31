@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date, timezone
+from datetime import date, timedelta, timezone
 
 import config
 from fetch import FetchError, fetch_forecast
@@ -59,9 +59,9 @@ def main() -> None:
         print("Telegram: TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping send.")
 
     # --- Log -------------------------------------------------------------
-    today = date.today()
-    append_prediction(today, result, cfg, hours)
-    print(f"Log: row written for {today}.")
+    tomorrow = date.today() + timedelta(days=1)
+    append_prediction(tomorrow, result, cfg, hours)
+    print(f"Log: row written for {tomorrow}.")
 
 
 def _fail(reason: str) -> None:

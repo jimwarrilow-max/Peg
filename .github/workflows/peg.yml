@@ -1,11 +1,10 @@
-name: Peg — morning forecast
+name: Peg — evening forecast
 
 on:
   schedule:
-    # 06:45 UTC — arrives at 06:45 GMT (winter) or 07:45 BST (summer),
-    # both comfortably before the 9am hang time.
-    # Off the top of the hour to avoid GitHub Actions peak-load delays.
-    - cron: '45 6 * * *'
+    # 19:00 UTC — arrives at 8pm BST (summer) or 7pm GMT (winter),
+    # the evening before so you can decide to hang out the next morning.
+    - cron: '0 19 * * *'
   workflow_dispatch:   # manual "Run now" from the Actions tab
 
 env:
@@ -31,7 +30,7 @@ jobs:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
         run: python outcome.py
 
-      - name: Send morning verdict
+      - name: Send evening forecast
         env:
           TELEGRAM_TOKEN:   ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}

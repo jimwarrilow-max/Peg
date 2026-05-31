@@ -60,8 +60,8 @@ def format_message(
     """Return a Telegram-HTML-formatted verdict string."""
     if result.skipped:
         return (
-            "<b>Peg's drawn a blank today</b> — couldn't get a clean read, "
-            "so no verdict rather than a bad one. Back tomorrow."
+            "<b>Peg's drawn a blank</b> — couldn't get a clean read on tomorrow, "
+            "so no verdict rather than a bad one. Back tomorrow evening."
         )
 
     score = result.display_score
@@ -84,7 +84,7 @@ def format_message(
     if result.band == Band.CRACK:
         gloat = _GLOAT_LINE if _is_cold(hours, hang_hour, bring_in_hour, dusk_hour) else ""
         return (
-            f"🧺 <b>Peg here. Today's a belter — {score}/100.</b> "
+            f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
             f"Out by {hang_str} and it'll be crisp by {dry_by_str}.{gloat}"
             f"{uv_line}"
         )
@@ -107,9 +107,9 @@ def format_message(
 
     # Band.TUMBLE
     return (
-        f"🧺 <b>Peg says don't bother. {score}/100.</b> "
-        f"Air's too damp to take anything off your hands today. "
-        f"Tumble dryer, or wait for tomorrow."
+        f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
+        f"Air'll be too damp to take anything off your hands. "
+        f"Tumble dryer, or hold on."
         f"{uv_line}"
     )
 
