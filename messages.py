@@ -86,7 +86,7 @@ def format_message(
     window_end = min(bring_in_hour, dusk_hour)
     uv_line = _peak_uv_line(hours, hang_hour, bring_in_hour, dusk_hour)
 
-    if result.override:
+    if result.override and result.band != Band.TUMBLE:
         rain_hour = _first_late_rain_hour(hours, bring_in_hour, dusk_hour)
         rain_str = _fmt_hour(rain_hour) if rain_hour is not None else "later"
         good_end = (rain_hour - 1) if rain_hour is not None else window_end
