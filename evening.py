@@ -32,6 +32,7 @@ def main() -> None:
         {"text": "👎 Still damp", "callback_data": f"damp:{today}"},
     ]]
 
+    failures = 0
     for chat_id in chat_ids:
         try:
             send_with_keyboard(
@@ -42,7 +43,10 @@ def main() -> None:
             print(f"Evening prompt sent to {chat_id}.")
         except NotifyError as exc:
             print(f"Failed to send evening prompt to {chat_id}: {exc}", file=sys.stderr)
-            sys.exit(1)
+            failures += 1
+
+    if failures == len(chat_ids):
+        sys.exit(1)
 
 
 if __name__ == "__main__":
