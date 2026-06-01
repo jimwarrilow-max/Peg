@@ -2,9 +2,9 @@ name: Peg — evening forecast
 
 on:
   schedule:
-    # 19:00 UTC — arrives at 8pm BST (summer) or 7pm GMT (winter),
-    # the evening before so you can decide to hang out the next morning.
-    - cron: '0 19 * * *'
+    # 16:00 UTC — arrives at 5pm BST (summer) or 4pm GMT (winter),
+    # early enough to load the washer for a morning hang.
+    - cron: '0 16 * * *'
   workflow_dispatch:   # manual "Run now" from the Actions tab
 
 env:
