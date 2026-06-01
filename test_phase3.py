@@ -103,8 +103,8 @@ class TestFormatMessage:
         assert "cautious" in msg.lower()
         assert "⚠" in msg
 
-    def test_override_tumble_shows_tumble_not_override(self):
-        """Override + TUMBLE band → show tumble message, not the misleading override warning."""
+    def test_override_tumble_shows_tumble_with_rain_info(self):
+        """Override + TUMBLE → tumble message that still mentions the rain timing and shows score."""
         hours = _hours()
         hours[17] = HourForecast(
             hour=17, temp_c=15.0, rh_pct=90.0,
@@ -114,6 +114,8 @@ class TestFormatMessage:
         msg = format_message(_result(override=True, raw_score=2.0, band=Band.TUMBLE, will_dry=False), 9, 18, 21, hours)
         assert "cautious" not in msg.lower()
         assert "don't bother" in msg.lower()
+        assert "0" in msg           # score shown
+        assert "rain" in msg.lower()  # rain mentioned
 
     def test_override_shows_score(self):
         hours = _hours()
@@ -131,6 +133,35 @@ class TestFormatMessage:
         assert "°C" in msg
         assert "mph" in msg
         assert "humidity" in msg
+
+    def test_rain_line_shown_when_rain_in_window(self):
+        """Rain timing line appears when a window hour is rain-gated."""
+        hours = _hours()
+        hours[15] = HourForecast(
+            hour=15, temp_c=15.0, rh_pct=80.0,
+            vpd_kpa=0.3, wind_mph=8.0, solar_wm2=100.0,
+            precip_mm=0.0, precip_prob_pct=70.0,
+        )
+        msg = format_message(_result(raw_score=65.0, band=Band.GOOD), 9, 18, 21, hours)
+        assert "🌧️" in msg
+        assert "70%" in msg
+
+    def test_rain_line_absent_when_no_rain(self):
+        """No rain line on a clear day."""
+        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, _hours())
+        assert "🌧️" not in msg
+
+    def test_rain_from_start_of_window(self):
+        """When rain starts at hang hour, shows 'Rain from 9am' without dry prefix."""
+        hours = _hours()
+        hours[9] = HourForecast(
+            hour=9, temp_c=15.0, rh_pct=80.0,
+            vpd_kpa=0.3, wind_mph=8.0, solar_wm2=100.0,
+            precip_mm=0.0, precip_prob_pct=80.0,
+        )
+        msg = format_message(_result(raw_score=20.0, band=Band.TUMBLE, will_dry=False), 9, 18, 21, hours)
+        assert "Rain from 9am" in msg
+        assert "Dry till" not in msg
 
     def test_override_never_shows_good_band(self):
         """INV-07 reflected in the message: override → no 'Good drying day' wording."""

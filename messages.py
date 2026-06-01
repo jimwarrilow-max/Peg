@@ -66,6 +66,26 @@ def _conditions_line(hours: list[HourForecast], hang_hour: int, end_hour: int) -
     return ("\n" + " · ".join(parts)) if parts else ""
 
 
+def _rain_window_line(hours: list[HourForecast], hang_hour: int, bring_in_hour: int, dusk_hour: int) -> str:
+    """Show when rain is expected in the drying window, or empty if none."""
+    end_hour = min(bring_in_hour, dusk_hour)
+    by_hour = {h.hour: h for h in hours}
+    first_rain = None
+    first_prob = 0.0
+    for hnum in range(hang_hour, end_hour + 1):
+        h = by_hour.get(hnum)
+        if h and _is_rain_gated(h):
+            first_rain = hnum
+            first_prob = h.precip_prob_pct or 0.0
+            break
+    if first_rain is None:
+        return ""
+    prob_str = f"{int(first_prob)}%"
+    if first_rain <= hang_hour:
+        return f"\n🌧️ Rain from {_fmt_hour(first_rain)} ({prob_str})"
+    return f"\n🌧️ Dry till {_fmt_hour(first_rain - 1)} · Rain from {_fmt_hour(first_rain)} ({prob_str})"
+
+
 def format_message(
     result: ScoreResult,
     hang_hour: int,
@@ -84,18 +104,27 @@ def format_message(
     hang_str = _fmt_hour(hang_hour)
 
     window_end = min(bring_in_hour, dusk_hour)
-    uv_line = _peak_uv_line(hours, hang_hour, bring_in_hour, dusk_hour)
+    uv_line   = _peak_uv_line(hours, hang_hour, bring_in_hour, dusk_hour)
+    rain_line = _rain_window_line(hours, hang_hour, bring_in_hour, dusk_hour)
 
-    if result.override and result.band != Band.TUMBLE:
+    if result.override:
         rain_hour = _first_late_rain_hour(hours, bring_in_hour, dusk_hour)
         rain_str = _fmt_hour(rain_hour) if rain_hour is not None else "later"
+        if result.band == Band.TUMBLE:
+            cond = _conditions_line(hours, hang_hour, window_end)
+            return (
+                f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
+                f"Air'll be too damp to dry anything — and rain arrives at {rain_str} "
+                f"before bring-in time anyway."
+                f"{cond}{rain_line}{uv_line}"
+            )
         good_end = (rain_hour - 1) if rain_hour is not None else window_end
         cond = _conditions_line(hours, hang_hour, good_end)
         return (
             f"⚠️ <b>Peg's cautious — {score}/100.</b> Good drying till {rain_str}, "
             f"then rain before bring-in time. Fine if you're home to dash it in early "
             f"— risky if you're out all day."
-            f"{cond}{uv_line}"
+            f"{cond}{rain_line}{uv_line}"
         )
 
     end_hour = result.best_window[1] if result.best_window else window_end
@@ -107,7 +136,7 @@ def format_message(
         return (
             f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
             f"Out by {hang_str} and it'll be crisp by {dry_by_str}.{gloat}"
-            f"{cond}{uv_line}"
+            f"{cond}{rain_line}{uv_line}"
         )
 
     if result.band == Band.GOOD:
@@ -115,7 +144,7 @@ def format_message(
             f"🧺 <b>Peg's verdict: {score}/100. A solid one.</b> "
             f"Out by {hang_str}, in by {dry_by_str}. "
             f"Won't break records, but it'll get the job done."
-            f"{cond}{uv_line}"
+            f"{cond}{rain_line}{uv_line}"
         )
 
     if result.band == Band.MARGINAL:
@@ -123,7 +152,7 @@ def format_message(
             f"🧺 <b>Peg's on the fence — {score}/100.</b> "
             f"It'll <i>probably</i> dry if you're about to dash it in, "
             f"but the heavy stuff might sulk. I'd risk a light load, not the towels."
-            f"{cond}{uv_line}"
+            f"{cond}{rain_line}{uv_line}"
         )
 
     # Band.TUMBLE
@@ -131,7 +160,7 @@ def format_message(
         f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
         f"Air'll be too damp to take anything off your hands. "
         f"Tumble dryer, or hold on."
-        f"{cond}{uv_line}"
+        f"{cond}{rain_line}{uv_line}"
     )
 
 
