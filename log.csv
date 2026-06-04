@@ -5,3 +5,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-06-02,9,18,21,13.43,15,Tumble-dryer weather,False,True,False,False,,16.38,68.2,0.608,11.25,357.4,5.1,
 2026-06-03,9,18,21,0.0,0,Tumble-dryer weather,False,True,True,False,,14.77,80.3,0.362,17.53,317.7,5.3,
 2026-06-04,9,18,21,0.0,0,Tumble-dryer weather,False,True,True,False,,14.57,71.3,0.494,17.33,302.2,3.1,
+2026-06-05,9,18,21,98.12,100,Crack open the pegs,True,False,False,False,09:00-14:00,13.9,54.9,0.72,10.37,353.8,3.6,
