@@ -29,7 +29,6 @@ def _make_log(tmp_path, dates: list[str]) -> str:
             raw_score=75.0, display_score=75, band=Band.GOOD,
             will_dry=True, override=False, best_window=(9, 14),
             gust_flag=False, skipped=False,
-            reason="Good conditions.",
         )
         cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
         hours = [

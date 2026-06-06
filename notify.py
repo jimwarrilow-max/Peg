@@ -9,9 +9,11 @@ any other code.
 from __future__ import annotations
 
 import json
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Callable
 
 _TELEGRAM_API = "https://api.telegram.org/bot{token}/{method}"
 
@@ -47,6 +49,22 @@ def send_with_keyboard(
         "parse_mode":   "HTML",
         "reply_markup": {"inline_keyboard": keyboard},
     })
+
+
+def broadcast(chat_ids: list[str], send_one: Callable[[str], None]) -> int:
+    """
+    Call send_one(chat_id) for each chat_id.
+
+    Logs per-recipient failures to stderr. Returns the number of failures.
+    """
+    failures = 0
+    for chat_id in chat_ids:
+        try:
+            send_one(chat_id)
+        except NotifyError as exc:
+            print(f"Telegram: failed for {chat_id} — {exc}", file=sys.stderr)
+            failures += 1
+    return failures
 
 
 def answer_callback(callback_query_id: str, token: str) -> None:
