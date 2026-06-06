@@ -53,27 +53,19 @@ def _read_log(log_path: str) -> list[dict]:
 
 class TestWriteOutcome:
 
-    def test_writes_dry_outcome(self, tmp_path):
+    @pytest.mark.parametrize("outcome", ["dry", "damp"])
+    def test_writes_outcome(self, outcome, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-30"])
-        result = write_outcome("2026-05-30", "dry", log_path=log_path)
+        result = write_outcome("2026-05-30", outcome, log_path=log_path)
         assert result is True
-        rows = _read_log(log_path)
-        assert rows[0]["outcome"] == "dry"
-
-    def test_writes_damp_outcome(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        write_outcome("2026-05-30", "damp", log_path=log_path)
-        rows = _read_log(log_path)
-        assert rows[0]["outcome"] == "damp"
+        assert _read_log(log_path)[0]["outcome"] == outcome
 
     def test_returns_false_for_missing_date(self, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-30"])
-        result = write_outcome("2026-05-31", "dry", log_path=log_path)
-        assert result is False
+        assert write_outcome("2026-05-31", "dry", log_path=log_path) is False
 
     def test_returns_false_for_missing_file(self, tmp_path):
-        result = write_outcome("2026-05-30", "dry", log_path=str(tmp_path / "nope.csv"))
-        assert result is False
+        assert write_outcome("2026-05-30", "dry", log_path=str(tmp_path / "nope.csv")) is False
 
     def test_only_target_row_updated(self, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-29", "2026-05-30", "2026-05-31"])
@@ -97,8 +89,7 @@ class TestWriteOutcome:
         log_path = _make_log(tmp_path, ["2026-05-30"])
         write_outcome("2026-05-30", "dry",  log_path=log_path)
         write_outcome("2026-05-30", "damp", log_path=log_path)
-        rows = _read_log(log_path)
-        assert rows[0]["outcome"] == "damp"
+        assert _read_log(log_path)[0]["outcome"] == "damp"
 
 
 # ---------------------------------------------------------------------------
@@ -128,22 +119,16 @@ class TestOutcomeProcessor:
              patch("outcome.write_outcome", side_effect=lambda d, o: write_outcome(d, o, log_path=log_path)):
             outcome.main()
 
-    def test_dry_response_written_to_log(self, tmp_path):
+    @pytest.mark.parametrize("outcome", ["dry", "damp"])
+    def test_response_written_to_log(self, outcome, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-30"])
-        updates = [_make_callback_update(101, "dry:2026-05-30")]
+        updates = [_make_callback_update(101, f"{outcome}:2026-05-30")]
         self._run_outcome(updates, log_path, str(tmp_path / ".offset"))
-        assert _read_log(log_path)[0]["outcome"] == "dry"
-
-    def test_damp_response_written_to_log(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        updates = [_make_callback_update(101, "damp:2026-05-30")]
-        self._run_outcome(updates, log_path, str(tmp_path / ".offset"))
-        assert _read_log(log_path)[0]["outcome"] == "damp"
+        assert _read_log(log_path)[0]["outcome"] == outcome
 
     def test_unknown_callback_data_ignored(self, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-30"])
-        updates = [_make_callback_update(101, "something_unexpected")]
-        self._run_outcome(updates, log_path, str(tmp_path / ".offset"))
+        self._run_outcome([_make_callback_update(101, "something_unexpected")], log_path, str(tmp_path / ".offset"))
         assert _read_log(log_path)[0]["outcome"] == ""
 
     def test_no_updates_is_a_no_op(self, tmp_path):
@@ -152,14 +137,13 @@ class TestOutcomeProcessor:
         assert _read_log(log_path)[0]["outcome"] == ""
 
     def test_offset_advanced_after_processing(self, tmp_path):
-        log_path  = _make_log(tmp_path, ["2026-05-30"])
+        log_path    = _make_log(tmp_path, ["2026-05-30"])
         offset_path = str(tmp_path / ".offset")
-        updates = [_make_callback_update(200, "dry:2026-05-30")]
-        self._run_outcome(updates, log_path, offset_path)
+        self._run_outcome([_make_callback_update(200, "dry:2026-05-30")], log_path, offset_path)
         assert Path(offset_path).read_text().strip() == "201"
 
     def test_offset_not_advanced_on_no_updates(self, tmp_path):
-        log_path  = _make_log(tmp_path, ["2026-05-30"])
+        log_path    = _make_log(tmp_path, ["2026-05-30"])
         offset_path = str(tmp_path / ".offset")
         Path(offset_path).write_text("50")
         self._run_outcome([], log_path, offset_path)
@@ -167,9 +151,7 @@ class TestOutcomeProcessor:
 
     def test_missing_log_row_does_not_crash(self, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-30"])
-        updates = [_make_callback_update(101, "dry:2026-05-28")]  # no row for this date
-        self._run_outcome(updates, log_path, str(tmp_path / ".offset"))
-        # Should complete without error; 2026-05-30 row unchanged
+        self._run_outcome([_make_callback_update(101, "dry:2026-05-28")], log_path, str(tmp_path / ".offset"))
         assert _read_log(log_path)[0]["outcome"] == ""
 
 
@@ -178,15 +160,6 @@ class TestOutcomeProcessor:
 # ---------------------------------------------------------------------------
 
 class TestNotifyExtensions:
-
-    def _fake_post(self, status: int = 200, ok: bool = True):
-        body = json.dumps({"ok": ok, "result": []}).encode()
-        mock_resp = MagicMock()
-        mock_resp.__enter__ = lambda s: s
-        mock_resp.__exit__ = MagicMock(return_value=False)
-        mock_resp.read.return_value = body
-        mock_resp.status = status
-        return MagicMock(return_value=mock_resp)
 
     def test_send_with_keyboard_posts_reply_markup(self):
         captured = []

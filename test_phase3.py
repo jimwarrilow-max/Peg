@@ -12,7 +12,7 @@ from datetime import date
 
 import pytest
 
-from messages import _fmt_hour, _is_cold, format_message
+from messages import _fmt_hour, _is_cold, _uv_label, format_message
 from scorer import Band, HourForecast, ScoreResult, WindowConfig
 from log import LOG_PATH, _row_exists, append_prediction
 
@@ -55,6 +55,17 @@ def _hours(n: int = 24, temp_c: float = 18.0, rh_pct: float = 60.0) -> list[Hour
     ]
 
 
+def _hours_with_uv(uv: float = 5.0) -> list[HourForecast]:
+    return [
+        HourForecast(
+            hour=i, temp_c=18.0, rh_pct=60.0,
+            vpd_kpa=0.7, wind_mph=8.0, solar_wm2=300.0,
+            precip_mm=0.0, precip_prob_pct=5.0, uv_index=uv,
+        )
+        for i in range(24)
+    ]
+
+
 def _cfg(hang: int = 9, bring_in: int = 18, dusk: int = 21) -> WindowConfig:
     return WindowConfig(hang_hour=hang, bring_in_hour=bring_in, dusk_hour=dusk)
 
@@ -70,25 +81,17 @@ class TestFormatMessage:
         assert "blank" in msg
         assert "no verdict" in msg
 
-    def test_crack_open_contains_score(self):
-        msg = format_message(_result(raw_score=85.0, band=Band.CRACK), 9, 18, 21, _hours())
-        assert "85" in msg
-        assert "belter" in msg.lower()
-
-    def test_good_contains_score(self):
-        msg = format_message(_result(raw_score=65.0, band=Band.GOOD), 9, 18, 21, _hours())
-        assert "65" in msg
-        assert "solid" in msg.lower()
-
-    def test_marginal_contains_score(self):
-        msg = format_message(_result(raw_score=45.0, band=Band.MARGINAL, will_dry=False), 9, 18, 21, _hours())
-        assert "45" in msg
-        assert "fence" in msg.lower()
-
-    def test_tumble_contains_score(self):
-        msg = format_message(_result(raw_score=20.0, band=Band.TUMBLE, will_dry=False), 9, 18, 21, _hours())
-        assert "20" in msg
-        assert "don't bother" in msg.lower()
+    @pytest.mark.parametrize("band, raw, will_dry, keyword", [
+        (Band.CRACK,    85.0, True,  "belter"),
+        (Band.GOOD,     65.0, True,  "solid"),
+        (Band.MARGINAL, 45.0, False, "fence"),
+        (Band.TUMBLE,   20.0, False, "don't bother"),
+    ])
+    def test_band_message_contains_score_and_keyword(self, band, raw, will_dry, keyword):
+        """Each band produces the right voice copy and includes the score."""
+        msg = format_message(_result(raw_score=raw, band=band, will_dry=will_dry), 9, 18, 21, _hours())
+        assert str(int(round(raw / 5) * 5)) in msg
+        assert keyword in msg.lower()
 
     def test_override_message(self):
         # Make the final 2h of the window rain-gated
@@ -177,19 +180,29 @@ class TestFormatMessage:
 
     def test_cold_gloat_appended_on_cold_crack_day(self):
         """Cold + Crack → gloat line appended."""
-        cold_hours = _hours(temp_c=10.0)
-        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, cold_hours)
+        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, _hours(temp_c=10.0))
         assert "Nippy" in msg
 
     def test_no_gloat_on_warm_crack_day(self):
-        warm_hours = _hours(temp_c=22.0)
-        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, warm_hours)
+        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, _hours(temp_c=22.0))
         assert "Nippy" not in msg
 
-    def test_message_is_string(self):
-        msg = format_message(_result(), 9, 18, 21, _hours())
-        assert isinstance(msg, str)
-        assert len(msg) > 0
+    def test_html_bold_present(self):
+        """Messages use HTML bold tags for Telegram."""
+        msg = format_message(_result(raw_score=85.0, band=Band.CRACK), 9, 18, 21, _hours())
+        assert "<b>" in msg and "</b>" in msg
+
+    def test_uv_line_shown_when_uv_present(self):
+        """UV index line appears when window hours have UV data."""
+        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21, _hours_with_uv(uv=5.0))
+        assert "☀️" in msg
+        assert "UV" in msg
+        assert "Moderate" in msg
+
+    def test_uv_line_absent_when_no_uv_data(self):
+        """No UV line when uv_index is None for all hours."""
+        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21, _hours())
+        assert "☀️" not in msg
 
     @pytest.mark.parametrize("h, expected", [
         (0,  "midnight"),
@@ -202,10 +215,21 @@ class TestFormatMessage:
     def test_fmt_hour(self, h, expected):
         assert _fmt_hour(h) == expected
 
-    def test_html_bold_present(self):
-        """Messages use HTML bold tags for Telegram."""
-        msg = format_message(_result(raw_score=85.0, band=Band.CRACK), 9, 18, 21, _hours())
-        assert "<b>" in msg and "</b>" in msg
+    @pytest.mark.parametrize("uv, expected_label", [
+        (0.0,  "Low"),
+        (2.9,  "Low"),
+        (3.0,  "Moderate"),
+        (5.9,  "Moderate"),
+        (6.0,  "High"),
+        (7.9,  "High"),
+        (8.0,  "Very High"),
+        (10.9, "Very High"),
+        (11.0, "Extreme"),
+        (15.0, "Extreme"),
+    ])
+    def test_uv_label_thresholds(self, uv, expected_label):
+        """Each WHO UV band boundary maps to the correct label."""
+        assert _uv_label(uv) == expected_label
 
 
 # ---------------------------------------------------------------------------
@@ -228,22 +252,13 @@ class TestLog:
         assert os.path.isfile(log_path)
         assert len(rows) == 1
 
-    def test_row_contains_date(self, tmp_path):
+    def test_row_has_expected_fields(self, tmp_path):
+        """Date, band and raw_score are all written correctly in the same row."""
         rows, _ = self._write_and_read(
-            date(2026, 5, 30), _result(), _cfg(), _hours(), tmp_path
+            date(2026, 5, 30), _result(band=Band.GOOD, raw_score=72.5), _cfg(), _hours(), tmp_path
         )
         assert rows[0]["date"] == "2026-05-30"
-
-    def test_row_contains_band(self, tmp_path):
-        rows, _ = self._write_and_read(
-            date(2026, 5, 30), _result(band=Band.GOOD), _cfg(), _hours(), tmp_path
-        )
         assert rows[0]["band"] == Band.GOOD.value
-
-    def test_row_contains_raw_score(self, tmp_path):
-        rows, _ = self._write_and_read(
-            date(2026, 5, 30), _result(raw_score=72.5), _cfg(), _hours(), tmp_path
-        )
         assert float(rows[0]["raw_score"]) == pytest.approx(72.5)
 
     def test_outcome_column_empty_on_write(self, tmp_path):
@@ -280,17 +295,13 @@ class TestLog:
 
     def test_best_window_formatted(self, tmp_path):
         rows, _ = self._write_and_read(
-            date(2026, 5, 30),
-            _result(best_window=(9, 13)),
-            _cfg(), _hours(), tmp_path
+            date(2026, 5, 30), _result(best_window=(9, 13)), _cfg(), _hours(), tmp_path
         )
         assert rows[0]["best_window"] == "09:00-13:00"
 
     def test_no_best_window_is_empty_string(self, tmp_path):
         rows, _ = self._write_and_read(
-            date(2026, 5, 30),
-            _result(best_window=None),
-            _cfg(), _hours(), tmp_path
+            date(2026, 5, 30), _result(best_window=None), _cfg(), _hours(), tmp_path
         )
         assert rows[0]["best_window"] == ""
 
