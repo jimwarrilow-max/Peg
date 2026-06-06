@@ -109,7 +109,7 @@ def _clamp(value: float, lo: float, hi: float) -> float:
     return max(lo, min(hi, value))
 
 
-def _is_rain_gated(hour: HourForecast) -> bool:
+def is_rain_gated(hour: HourForecast) -> bool:
     prob = hour.precip_prob_pct
     mm   = hour.precip_mm
     if prob is not None and prob > RAIN_PROB_GATE:
@@ -132,7 +132,7 @@ def _is_scorable(hour: HourForecast) -> bool:
 
 def _hourly_potential(hour: HourForecast) -> float:
     """Returns 0–1; caller must have verified the hour is scorable."""
-    if _is_rain_gated(hour):
+    if is_rain_gated(hour):
         return 0.0
     vpd_score   = _clamp(hour.vpd_kpa / VPD_FULL, 0.0, 1.0)
     wind_score  = _clamp(WIND_FLOOR + hour.wind_mph / (WIND_FULL_MPH / (1.0 - WIND_FLOOR)), 0.0, 1.0)
@@ -250,7 +250,7 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
     # Final LATE_RAIN_HOURS of the window
     late_hours = window_hours[-LATE_RAIN_HOURS:] if len(window_hours) >= LATE_RAIN_HOURS else window_hours
     late_forecasts = [by_hour[h] for h in late_hours if h in by_hour]
-    override = any(_is_rain_gated(h) for h in late_forecasts)
+    override = any(is_rain_gated(h) for h in late_forecasts)
 
     if override:
         # Cap band at Marginal

@@ -12,15 +12,13 @@ import os
 import sys
 from datetime import date
 
+import config
 from notify import NotifyError, send_with_keyboard
 
 
 def main() -> None:
     token    = os.environ.get("TELEGRAM_TOKEN")
-    chat_ids = [
-        v for k in ("TELEGRAM_CHAT_ID", "TELEGRAM_CHAT_ID_2")
-        if (v := os.environ.get(k, "").strip())
-    ]
+    chat_ids = config.chat_ids()
 
     if not token or not chat_ids:
         print("TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping.")
