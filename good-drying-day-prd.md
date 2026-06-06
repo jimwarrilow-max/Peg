@@ -43,7 +43,7 @@ Secondary: "a good drying day" is widely misjudged (warm = good is wrong), so pe
 
 ## 4. Users
 
-- **Primary:** Jim + partner — one home, one washing line.
+- **Primary:** Jim — one home, one washing line.
 - **The implicit "user": the washing line.** Location is a property of the *line*, not the phone — the forecast must be where the washing hangs. Hence location is stored, not detected live.
 
 ## 5. Product Principles
