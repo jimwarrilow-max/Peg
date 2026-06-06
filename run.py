@@ -19,7 +19,7 @@ from datetime import date, timedelta, timezone
 import config
 from fetch import FetchError, fetch_forecast
 from log import append_prediction
-from messages import format_message
+from messages import SKIPPED_MSG, format_message
 from notify import NotifyError, send
 from scorer import WindowConfig, score
 
@@ -47,7 +47,7 @@ def main() -> None:
 
     # --- Notify ----------------------------------------------------------
     token    = os.environ.get("TELEGRAM_TOKEN")
-    chat_ids = _chat_ids()
+    chat_ids = config.chat_ids()
 
     if token and chat_ids:
         for chat_id in chat_ids:
@@ -65,28 +65,14 @@ def main() -> None:
     print(f"Log: row written for {tomorrow}.")
 
 
-def _chat_ids() -> list[str]:
-    """Return a list of configured chat IDs (primary + optional second)."""
-    ids = []
-    for key in ("TELEGRAM_CHAT_ID", "TELEGRAM_CHAT_ID_2"):
-        val = os.environ.get(key, "").strip()
-        if val:
-            ids.append(val)
-    return ids
-
-
 def _fail(reason: str) -> None:
     """Send a failure ping if credentials are available, then exit non-zero."""
     print(f"\nPeg's drawn a blank — {reason}", file=sys.stderr)
     token = os.environ.get("TELEGRAM_TOKEN")
-    for chat_id in _chat_ids():
-        if token:
+    if token:
+        for chat_id in config.chat_ids():
             try:
-                send(
-                    "<b>Peg's drawn a blank</b> — couldn't get a clean read on tomorrow, "
-                    "so no verdict rather than a bad one. Back tomorrow evening.",
-                    token, chat_id,
-                )
+                send(SKIPPED_MSG, token, chat_id)
             except NotifyError:
                 pass
     sys.exit(1)

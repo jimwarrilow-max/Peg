@@ -13,9 +13,13 @@ from scorer import (
     Band,
     HourForecast,
     LATE_RAIN_HOURS,
-    RAIN_MM_GATE,
-    RAIN_PROB_GATE,
     ScoreResult,
+    is_rain_gated,
+)
+
+SKIPPED_MSG = (
+    "<b>Peg's drawn a blank</b> — couldn't get a clean read on tomorrow, "
+    "so no verdict rather than a bad one. Back tomorrow evening."
 )
 
 _COLD_GLOAT_THRESHOLD_C = 15.0   # mean window temp below which Peg gloats
@@ -31,11 +35,7 @@ _UV_LABELS = [
 
 
 def _uv_label(uv: float) -> str:
-    label = _UV_LABELS[0][1]
-    for threshold, name in _UV_LABELS:
-        if uv >= threshold:
-            label = name
-    return label
+    return next(name for threshold, name in reversed(_UV_LABELS) if uv >= threshold)
 
 
 def _peak_uv_line(hours: list[HourForecast], hang_hour: int, bring_in_hour: int, dusk_hour: int) -> str:
@@ -74,7 +74,7 @@ def _rain_window_line(hours: list[HourForecast], hang_hour: int, bring_in_hour: 
     first_prob = 0.0
     for hnum in range(hang_hour, end_hour + 1):
         h = by_hour.get(hnum)
-        if h and _is_rain_gated(h):
+        if h and is_rain_gated(h):
             first_rain = hnum
             first_prob = h.precip_prob_pct or 0.0
             break
@@ -95,10 +95,7 @@ def format_message(
 ) -> str:
     """Return a Telegram-HTML-formatted verdict string."""
     if result.skipped:
-        return (
-            "<b>Peg's drawn a blank</b> — couldn't get a clean read on tomorrow, "
-            "so no verdict rather than a bad one. Back tomorrow evening."
-        )
+        return SKIPPED_MSG
 
     score = result.display_score
     hang_str = _fmt_hour(hang_hour)
@@ -190,17 +187,9 @@ def _first_late_rain_hour(
     by_hour = {h.hour: h for h in hours}
     for hnum in range(late_start, end_hour + 1):
         h = by_hour.get(hnum)
-        if h and _is_rain_gated(h):
+        if h and is_rain_gated(h):
             return hnum
     return None
-
-
-def _is_rain_gated(h: HourForecast) -> bool:
-    if h.precip_prob_pct is not None and h.precip_prob_pct > RAIN_PROB_GATE:
-        return True
-    if h.precip_mm is not None and h.precip_mm > RAIN_MM_GATE:
-        return True
-    return False
 
 
 def _is_cold(

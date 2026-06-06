@@ -88,11 +88,11 @@ def transform(data: dict, day_index: int = 0) -> tuple[list[HourForecast], int]:
         temp_c = _at(hourly, "temperature_2m", i)
         rh_pct = _at(hourly, "relative_humidity_2m", i)
 
-        vpd_kpa: Optional[float]
-        if temp_c is not None and rh_pct is not None:
-            vpd_kpa = compute_vpd(temp_c, rh_pct)
-        else:
-            vpd_kpa = None
+        vpd_kpa = (
+            compute_vpd(temp_c, rh_pct)
+            if temp_c is not None and rh_pct is not None
+            else None
+        )
 
         hours.append(HourForecast(
             hour=i - start,
