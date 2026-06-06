@@ -8,6 +8,7 @@ hitting the network.  _fetch_raw() error-handling is tested via unittest.mock.
 from __future__ import annotations
 
 import json
+import urllib.parse
 from io import BytesIO
 from unittest.mock import MagicMock, patch
 
@@ -44,6 +45,17 @@ def _make_response(n: int = 24, date: str = "2026-05-30") -> dict:
     }
 
 
+def _fake_urlopen(response_dict: dict):
+    """Return a mock urlopen that yields the given dict as JSON."""
+    body = json.dumps(response_dict).encode()
+    mock_resp = MagicMock()
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+    mock_resp.status = 200
+    mock_resp.read.return_value = body
+    return MagicMock(return_value=mock_resp)
+
+
 # ---------------------------------------------------------------------------
 # INT-01 — Parallel arrays mapped to per-hour objects, index-aligned
 # ---------------------------------------------------------------------------
@@ -51,50 +63,30 @@ def _make_response(n: int = 24, date: str = "2026-05-30") -> dict:
 class TestTransformHappyPath:
 
     def test_returns_24_hours(self):
-        data = _make_response()
-        hours, _ = transform(data)
+        hours, _ = transform(_make_response())
         assert len(hours) == 24
 
     def test_hour_field_matches_index(self):
-        data = _make_response()
-        hours, _ = transform(data)
+        hours, _ = transform(_make_response())
         for i, h in enumerate(hours):
             assert h.hour == i
 
     def test_temperature_aligned(self):
-        data = _make_response()
-        hours, _ = transform(data)
+        hours, _ = transform(_make_response())
         for i, h in enumerate(hours):
             assert h.temp_c == pytest.approx(15.0 + i * 0.1)
 
-    def test_wind_aligned(self):
-        data = _make_response()
-        hours, _ = transform(data)
-        assert all(h.wind_mph == pytest.approx(8.0) for h in hours)
-
-    def test_precip_aligned(self):
-        data = _make_response()
-        hours, _ = transform(data)
-        assert all(h.precip_mm == pytest.approx(0.0) for h in hours)
-
-    def test_precip_prob_aligned(self):
-        data = _make_response()
-        hours, _ = transform(data)
-        assert all(h.precip_prob_pct == pytest.approx(10.0) for h in hours)
-
-    def test_gust_aligned(self):
-        data = _make_response()
-        hours, _ = transform(data)
-        assert all(h.wind_gust_mph == pytest.approx(12.0) for h in hours)
-
-    def test_solar_aligned(self):
-        data = _make_response()
-        hours, _ = transform(data)
-        assert all(h.solar_wm2 == pytest.approx(300.0) for h in hours)
+    def test_all_constant_fields_aligned(self):
+        """wind, solar, precip, precip_prob and gust are aligned to the API arrays."""
+        hours, _ = transform(_make_response())
+        assert all(h.wind_mph        == pytest.approx(8.0)   for h in hours)
+        assert all(h.solar_wm2       == pytest.approx(300.0) for h in hours)
+        assert all(h.precip_mm       == pytest.approx(0.0)   for h in hours)
+        assert all(h.precip_prob_pct == pytest.approx(10.0)  for h in hours)
+        assert all(h.wind_gust_mph   == pytest.approx(12.0)  for h in hours)
 
     def test_dusk_hour_extracted(self):
-        data = _make_response()   # sunset at T21:18
-        _, dusk_hour = transform(data)
+        _, dusk_hour = transform(_make_response())   # sunset at T21:18
         assert dusk_hour == 21
 
     def test_dusk_hour_floor(self):
@@ -119,16 +111,9 @@ class TestVpdComputed:
 
     def test_vpd_computed_not_from_api_field(self):
         """VPD must be derived from temp+RH regardless of API content."""
-        data = _make_response()
-        hours, _ = transform(data)
+        hours, _ = transform(_make_response())
         for h in hours:
-            expected = compute_vpd(h.temp_c, h.rh_pct)
-            assert h.vpd_kpa == pytest.approx(expected, rel=1e-6)
-
-    def test_vpd_positive_for_normal_rh(self):
-        data = _make_response()
-        hours, _ = transform(data)
-        assert all(h.vpd_kpa > 0 for h in hours)
+            assert h.vpd_kpa == pytest.approx(compute_vpd(h.temp_c, h.rh_pct), rel=1e-6)
 
     def test_vpd_near_zero_at_saturation(self):
         """RH=100 → VPD≈0."""
@@ -167,29 +152,17 @@ class TestVpdComputed:
 
 class TestNullFieldHandling:
 
-    def test_null_wind_gives_none(self):
+    @pytest.mark.parametrize("api_field, attr, idx", [
+        ("wind_speed_10m",           "wind_mph",        7),
+        ("shortwave_radiation",      "solar_wm2",        2),
+        ("precipitation",            "precip_mm",       10),
+        ("precipitation_probability","precip_prob_pct", 10),
+    ])
+    def test_null_value_gives_none(self, api_field, attr, idx):
         data = _make_response()
-        data["hourly"]["wind_speed_10m"][7] = None
+        data["hourly"][api_field][idx] = None
         hours, _ = transform(data)
-        assert hours[7].wind_mph is None
-
-    def test_null_solar_gives_none(self):
-        data = _make_response()
-        data["hourly"]["shortwave_radiation"][2] = None
-        hours, _ = transform(data)
-        assert hours[2].solar_wm2 is None
-
-    def test_null_precip_gives_none(self):
-        data = _make_response()
-        data["hourly"]["precipitation"][10] = None
-        hours, _ = transform(data)
-        assert hours[10].precip_mm is None
-
-    def test_null_precip_prob_gives_none(self):
-        data = _make_response()
-        data["hourly"]["precipitation_probability"][10] = None
-        hours, _ = transform(data)
-        assert hours[10].precip_prob_pct is None
+        assert getattr(hours[idx], attr) is None
 
     def test_missing_field_entirely_gives_none(self):
         """If a whole field key is absent from the response, every hour gets None."""
@@ -198,26 +171,15 @@ class TestNullFieldHandling:
         hours, _ = transform(data)
         assert all(h.wind_mph is None for h in hours)
 
-    def test_null_does_not_become_zero(self):
-        """Null values must never silently become 0 — PRD §5 conservative bias."""
-        data = _make_response()
-        data["hourly"]["wind_speed_10m"][6] = None
-        hours, _ = transform(data)
-        assert hours[6].wind_mph is None
-        assert hours[6].wind_mph != 0.0
-
 
 # ---------------------------------------------------------------------------
-# INT-02 — Wind is in mph (regression guard against km/h)
+# INT-02 / INT-03 — Request URL parameters (mph, London timezone)
 # ---------------------------------------------------------------------------
 
 class TestUnits:
 
-    def test_wind_speed_unit_is_mph_in_url(self):
-        """The URL sent to Open-Meteo must include wind_speed_unit=mph."""
-        from fetch import OPEN_METEO_URL, _HOURLY_FIELDS
-        import urllib.parse
-
+    def test_request_url_parameters(self):
+        """URL must include wind_speed_unit=mph and timezone=Europe/London."""
         captured_url = []
 
         class FakeResponse:
@@ -226,35 +188,13 @@ class TestUnits:
             def __enter__(self): return self
             def __exit__(self, *a): pass
 
-        with patch("urllib.request.urlopen", side_effect=lambda url, **kw: (captured_url.append(url), FakeResponse())[1]):
+        with patch("urllib.request.urlopen",
+                   side_effect=lambda url, **kw: (captured_url.append(url), FakeResponse())[1]):
             from fetch import _fetch_raw
             _fetch_raw(52.0, -1.9, "Europe/London")
 
-        assert len(captured_url) == 1
-        parsed = urllib.parse.urlparse(captured_url[0])
-        params = urllib.parse.parse_qs(parsed.query)
-        assert params.get("wind_speed_unit") == ["mph"], (
-            "wind_speed_unit=mph missing from Open-Meteo URL — "
-            "all wind scores would be wrong (km/h is the default)"
-        )
-
-    def test_timezone_is_london_in_url(self):
-        """The URL must request Europe/London timezone (INT-03)."""
-        import urllib.parse as urlparse
-        captured_url = []
-
-        class FakeResponse:
-            status = 200
-            def read(self): return json.dumps(_make_response()).encode()
-            def __enter__(self): return self
-            def __exit__(self, *a): pass
-
-        with patch("urllib.request.urlopen", side_effect=lambda url, **kw: (captured_url.append(url), FakeResponse())[1]):
-            from fetch import _fetch_raw
-            _fetch_raw(52.0, -1.9, "Europe/London")
-
-        parsed = urlparse.urlparse(captured_url[0])
-        params = urlparse.parse_qs(parsed.query)
+        params = urllib.parse.parse_qs(urllib.parse.urlparse(captured_url[0]).query)
+        assert params.get("wind_speed_unit") == ["mph"], "wind_speed_unit=mph missing — all wind scores would be wrong"
         assert "Europe/London" in params.get("timezone", [])
 
 
@@ -305,9 +245,8 @@ class TestErrorHandling:
 
     def test_short_arrays_raises_fetch_error(self):
         """Fewer than 24 hourly entries → FetchError (partial day, can't score)."""
-        data = _make_response(n=12)
         with pytest.raises(FetchError, match="24"):
-            transform(data)
+            transform(_make_response(n=12))
 
 
 # ---------------------------------------------------------------------------

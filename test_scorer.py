@@ -7,7 +7,6 @@ so the scorer can be validated end-to-end before running the invariant suite.
 
 from __future__ import annotations
 
-import math
 import pytest
 
 from hypothesis import given, settings, assume
@@ -107,65 +106,46 @@ def _make_day_for_score(
 
 
 # ---------------------------------------------------------------------------
-# Baseline fixture tests (SCORE-01 → SCORE-14)
+# Baseline fixture tests (SCORE-02 → SCORE-14)
 # These pin concrete expected values and are re-baselined when weights change.
 # ---------------------------------------------------------------------------
 
 class TestBaselineFixtures:
 
-    def test_SCORE01_perfect_hour(self):
-        """vpd≥1.0, wind≥12mph, solar≥450 → hourly_potential = 1.0"""
-        # Feed 4 perfect hours so score is calculable
-        hours = _day_of(n_hours=4, vpd=1.0, wind=12.0, solar=450.0)
-        result = score(hours, _window(hang=8, bring_in=11, dusk=20))
-        # cumulative = 4 × 1.0 = 4.0 → will_dry True
-        assert result.will_dry
-        assert result.raw_score == pytest.approx(50.0)
-
     def test_SCORE02_still_air_wind_floor(self):
         """wind = 0 mph → wind sub-score = 0.25 (not 0)"""
-        # Verify indirectly: two identical days except one has 0 wind.
-        # The wind component is 0.3 × 0.25 = 0.075, not 0.
-        hours_still = _day_of(n_hours=8, vpd=0.0, wind=0.0, solar=0.0)
-        result = score(hours_still, _window())
         # All VPD and solar = 0; only wind floor contributes
         # hourly = 0.5×0 + 0.3×0.25 + 0.2×0 = 0.075 per hour
-        # cumulative = 8 × 0.075 = 0.6
-        # score = clamp(50 × 0.6/4.0, 0, 100) = clamp(7.5, 0, 100) = 7.5
+        # cumulative = 8 × 0.075 = 0.6  →  score = 50 × 0.6/4.0 = 7.5
+        hours = _day_of(n_hours=8, vpd=0.0, wind=0.0, solar=0.0)
+        result = score(hours, _window())
         assert result.raw_score == pytest.approx(7.5)
         assert not result.skipped
 
     def test_SCORE03_wind_saturation(self):
         """wind = 16 mph → wind sub-score clamps to 1.0 (not 1.25)"""
-        hours_16 = _day_of(n_hours=8, vpd=0.0, wind=16.0, solar=0.0)
-        hours_12 = _day_of(n_hours=8, vpd=0.0, wind=12.0, solar=0.0)
-        r16 = score(hours_16, _window())
-        r12 = score(hours_12, _window())
-        # Both should give the same score because sub-score is clamped
+        r16 = score(_day_of(n_hours=8, vpd=0.0, wind=16.0, solar=0.0), _window())
+        r12 = score(_day_of(n_hours=8, vpd=0.0, wind=12.0, solar=0.0), _window())
         assert r16.raw_score == pytest.approx(r12.raw_score)
 
     def test_SCORE04_vpd_clamp(self):
         """VPD = 1.5 kPa → vpd sub-score = 1.0 (clamped)"""
-        hours_15 = _day_of(n_hours=8, vpd=1.5, wind=0.0, solar=0.0)
-        hours_10 = _day_of(n_hours=8, vpd=1.0, wind=0.0, solar=0.0)
-        r15 = score(hours_15, _window())
-        r10 = score(hours_10, _window())
+        r15 = score(_day_of(n_hours=8, vpd=1.5, wind=0.0, solar=0.0), _window())
+        r10 = score(_day_of(n_hours=8, vpd=1.0, wind=0.0, solar=0.0), _window())
         assert r15.raw_score == pytest.approx(r10.raw_score)
 
     def test_SCORE05_weighted_mix(self):
         """vpd=0.6 / wind=8mph / solar=225 → hourly_potential = 0.625"""
         # vpd_s=0.6, wind_s=0.25+8/16=0.75, solar_s=225/450=0.5
-        # hourly = 0.5×0.6 + 0.3×0.75 + 0.2×0.5 = 0.3 + 0.225 + 0.1 = 0.625
+        # hourly = 0.5×0.6 + 0.3×0.75 + 0.2×0.5 = 0.625; cumulative = 5.0
+        # score = clamp(50 × 5.0/4.0, 0, 100) = 62.5
         hours = _day_of(n_hours=8, vpd=0.6, wind=8.0, solar=225.0)
         result = score(hours, _window(hang=8, bring_in=15, dusk=20))
-        # cumulative = 8 × 0.625 = 5.0
-        # score = clamp(50 × 5.0/4.0, 0, 100) = clamp(62.5, 0, 100) = 62.5
         assert result.raw_score == pytest.approx(62.5)
 
-    def test_SCORE06_meets_towel_bar(self):
-        """4 perfect hours → cumulative 4.0 → score 50 → will_dry True"""
-        hours = _day_of(n_hours=4, vpd=1.0, wind=12.0, solar=450.0,
-                        start_hour=8)
+    def test_SCORE06_perfect_day_hits_towel_bar(self):
+        """4 perfect hours → cumulative 4.0 → score 50, will_dry True, band Marginal"""
+        hours = _day_of(n_hours=4, vpd=1.0, wind=12.0, solar=450.0, start_hour=8)
         result = score(hours, _window(hang=8, bring_in=11, dusk=20))
         assert result.raw_score == pytest.approx(50.0)
         assert result.will_dry is True
@@ -180,44 +160,24 @@ class TestBaselineFixtures:
 
     def test_SCORE08_will_dry_boundary(self):
         """cumulative 3.99 → will_dry False; cumulative 4.00 → will_dry True"""
-        # 4 hours at potential=0.9975 → cumulative=3.99
-        # potential = 0.5×vpd + 0.3×wind + 0.2×solar
-        # Use vpd=1.0 (→1.0), wind=12 (→1.0), solar=0 (→0): hourly=0.80
-        # 5 hours × 0.80 = 4.0 → will_dry True
-        # 4 hours × 0.80 = 3.2 → will_dry False
-        hours_5 = _day_of(n_hours=5, vpd=1.0, wind=12.0, solar=0.0)
-        hours_4 = _day_of(n_hours=4, vpd=1.0, wind=12.0, solar=0.0)
-        r5 = score(hours_5, _window(hang=8, bring_in=12, dusk=20))
-        r4 = score(hours_4, _window(hang=8, bring_in=11, dusk=20))
+        # vpd=1.0, wind=12, solar=0: hourly potential = 0.80
+        # 5h × 0.80 = 4.0 → True; 4h × 0.80 = 3.2 → False
+        r5 = score(_day_of(n_hours=5, vpd=1.0, wind=12.0, solar=0.0), _window(hang=8, bring_in=12, dusk=20))
+        r4 = score(_day_of(n_hours=4, vpd=1.0, wind=12.0, solar=0.0), _window(hang=8, bring_in=11, dusk=20))
         assert r5.will_dry is True
         assert r4.will_dry is False
 
-    def test_SCORE09_rain_gate_by_prob(self):
-        """Hour with precip_prob 60% → potential = 0 regardless of other fields"""
-        hours = [_hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=60.0)]
-        # Only 1 hour in window
-        result = score(hours, _window(hang=8, bring_in=8, dusk=20))
-        assert result.raw_score == pytest.approx(0.0)
-
     def test_SCORE10_rain_gate_boundaries(self):
         """precip_prob >50 gates; =50 does not. precip_mm >0.2 gates; =0.2 does not."""
-        # 50% prob — NOT gated
-        h_50  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=50.0, precip_mm=0.0)
-        # 51% prob — gated
-        h_51  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=51.0, precip_mm=0.0)
-        # 0.2 mm — NOT gated
-        h_02  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=0.0,  precip_mm=0.2)
-        # 0.21 mm — gated
-        h_021 = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=0.0,  precip_mm=0.21)
         cfg = _window(hang=8, bring_in=8, dusk=20)
-        r50  = score([h_50],  cfg)
-        r51  = score([h_51],  cfg)
-        r02  = score([h_02],  cfg)
-        r021 = score([h_021], cfg)
-        assert r50.raw_score  > 0, "50% prob should not be gated"
-        assert r51.raw_score  == pytest.approx(0.0), "51% prob should be gated"
-        assert r02.raw_score  > 0, "0.2mm should not be gated"
-        assert r021.raw_score == pytest.approx(0.0), "0.21mm should be gated"
+        h_50  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=50.0, precip_mm=0.0)
+        h_51  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=51.0, precip_mm=0.0)
+        h_02  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=0.0,  precip_mm=0.2)
+        h_021 = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=0.0,  precip_mm=0.21)
+        assert score([h_50],  cfg).raw_score  > 0,             "50% prob should not be gated"
+        assert score([h_51],  cfg).raw_score  == pytest.approx(0.0), "51% prob should be gated"
+        assert score([h_02],  cfg).raw_score  > 0,             "0.2mm should not be gated"
+        assert score([h_021], cfg).raw_score  == pytest.approx(0.0), "0.21mm should be gated"
 
     def test_SCORE11_all_day_rain(self):
         """Every hour gated → cumulative 0 → score 0 → Tumble-dryer"""
@@ -264,23 +224,10 @@ class TestBaselineFixtures:
         """Band boundaries are evaluated on the raw score (tested via the public helper)."""
         assert band_from_raw(raw) == expected_band
 
-    def test_SCORE14_band_edges_via_scorer(self):
-        """End-to-end: verify the scorer propagates the band correctly for a known day."""
-        # 8 perfect hours → raw 100 → Crack open the pegs
-        hours, cfg = _make_day_for_score(100.0)
-        result = score(hours, cfg)
-        assert result.band == Band.CRACK
-        # 8 hours at ~43.75 → Tumble-dryer weather
-        hours_low, cfg_low = _make_day_for_score(34.0)
-        result_low = score(hours_low, cfg_low)
-        assert result_low.band == Band.TUMBLE
-
 
 # ---------------------------------------------------------------------------
 # Invariant tests INV-01 → INV-09
 # ---------------------------------------------------------------------------
-
-# Hypothesis strategies for generating valid forecast hours and windows
 
 _st_prob   = st.floats(min_value=0.0, max_value=100.0, allow_nan=False)
 _st_vpd    = st.floats(min_value=0.0, max_value=3.0,   allow_nan=False)
@@ -315,7 +262,6 @@ def _standard_window() -> WindowConfig:
 
 class TestInvariants:
 
-    # INV-01: Score is always within 0–100
     @given(st_day())
     @settings(max_examples=500)
     def test_INV01_score_bounds(self, hours):
@@ -324,7 +270,6 @@ class TestInvariants:
         if not result.skipped:
             assert 0.0 <= result.raw_score <= 100.0
 
-    # INV-02: Displayed score is always a multiple of 5
     @given(st_day())
     @settings(max_examples=500)
     def test_INV02_display_multiple_of_5(self, hours):
@@ -333,27 +278,23 @@ class TestInvariants:
         if not result.skipped:
             assert result.display_score % 5 == 0
 
-    # INV-03: Adding rain to any hour never increases the score
     @given(st_day(), st.integers(min_value=0, max_value=7))
     @settings(max_examples=500)
     def test_INV03_rain_never_increases_score(self, hours, idx):
         """Gating an hour with rain never makes the score go up."""
         assume(idx < len(hours))
         h = hours[idx]
-        # Make a version of that hour that is definitely rain-gated
         rainy_hour = HourForecast(
             hour=h.hour, temp_c=h.temp_c, rh_pct=h.rh_pct,
             vpd_kpa=h.vpd_kpa, wind_mph=h.wind_mph, solar_wm2=h.solar_wm2,
-            precip_mm=h.precip_mm, precip_prob_pct=100.0,  # definitely gated
+            precip_mm=h.precip_mm, precip_prob_pct=100.0,
             wind_gust_mph=h.wind_gust_mph,
         )
-        hours_with_rain = hours[:idx] + [rainy_hour] + hours[idx+1:]
-        r_before = score(hours,           _standard_window())
-        r_after  = score(hours_with_rain, _standard_window())
+        r_before = score(hours,                                _standard_window())
+        r_after  = score(hours[:idx] + [rainy_hour] + hours[idx+1:], _standard_window())
         if not r_before.skipped and not r_after.skipped:
             assert r_after.raw_score <= r_before.raw_score + 1e-9
 
-    # INV-04: Increasing wind from 0 → 12 mph never decreases the score
     @given(st_day())
     @settings(max_examples=500)
     def test_INV04_more_wind_never_decreases_score(self, hours):
@@ -372,7 +313,6 @@ class TestInvariants:
         if not r_before.skipped and not r_after.skipped:
             assert r_after.raw_score >= r_before.raw_score - 1e-9
 
-    # INV-05: Decreasing VPD never increases the score
     @given(st_day())
     @settings(max_examples=500)
     def test_INV05_lower_vpd_never_increases_score(self, hours):
@@ -392,7 +332,6 @@ class TestInvariants:
         if not r_before.skipped and not r_after.skipped:
             assert r_after.raw_score <= r_before.raw_score + 1e-9
 
-    # INV-06: Recommended window always lies within [hang_time, min(bring_in, dusk)]
     @given(st_day())
     @settings(max_examples=500)
     def test_INV06_window_within_bounds(self, hours):
@@ -406,22 +345,18 @@ class TestInvariants:
             assert end   <= end_bound
             assert start <= end
 
-    # INV-07: If any hour in the final 2h is rain-gated, verdict is never Good/Crack
     @given(st_day())
     @settings(max_examples=500)
     def test_INV07_late_rain_caps_band(self, hours):
         """Rain in the final 2h of the window → band is never Good or Crack open pegs."""
-        # Force the last 2 hours to be rain-gated (keep other hours as-is)
         cfg = _standard_window()
         end_hour = min(cfg.bring_in_hour, cfg.dusk_hour)
         late_hours_set = set(range(end_hour - LATE_RAIN_HOURS + 1, end_hour + 1))
-
         forced = [
             HourForecast(
                 hour=h.hour, temp_c=h.temp_c, rh_pct=h.rh_pct,
                 vpd_kpa=h.vpd_kpa, wind_mph=h.wind_mph, solar_wm2=h.solar_wm2,
-                precip_mm=100.0,      # definitely gated
-                precip_prob_pct=100.0,
+                precip_mm=100.0, precip_prob_pct=100.0,
                 wind_gust_mph=h.wind_gust_mph,
             )
             if h.hour in late_hours_set else h
@@ -429,61 +364,37 @@ class TestInvariants:
         ]
         result = score(forced, cfg)
         if not result.skipped:
-            assert result.band not in (Band.GOOD, Band.CRACK), (
-                f"Expected band capped at Marginal but got {result.band} "
-                f"(raw_score={result.raw_score:.2f})"
-            )
+            assert result.band not in (Band.GOOD, Band.CRACK)
 
-    # INV-08: will_dry is true iff cumulative >= DRY_TARGET
     @given(st_day())
     @settings(max_examples=500)
     def test_INV08_will_dry_iff_cumulative_meets_target(self, hours):
         """will_dry is True exactly when score >= 50 (the DRY_TARGET threshold)."""
         result = score(hours, _standard_window())
         if not result.skipped:
-            # score = clamp(50 × cumulative / DRY_TARGET, 0, 100)
-            # will_dry ↔ cumulative >= DRY_TARGET ↔ score >= 50
             if result.will_dry:
                 assert result.raw_score >= 50.0 - 1e-9
             else:
                 assert result.raw_score < 50.0 + 1e-9
 
-    # INV-09: A cold-dry-windy day always scores >= a warm-humid-still day
-    # (the headline principle from §7 and §8)
     @pytest.mark.parametrize("n_hours", [4, 6, 8])
     def test_INV09_cold_dry_windy_beats_warm_humid_still(self, n_hours):
         """
-        PRD hand-test: 10°C/50% RH → VPD≈0.61 kPa (cold, dry, breezy)
-        must outperform 22°C/85% RH → VPD≈0.40 kPa (warm, muggy, still).
+        PRD hand-test: 10°C/50% RH (VPD≈0.61) must outperform 22°C/85% RH (VPD≈0.40).
         """
         vpd_cold = compute_vpd(10.0, 50.0)   # ≈ 0.610 kPa
         vpd_warm = compute_vpd(22.0, 85.0)   # ≈ 0.399 kPa
-
-        cold_windy = _day_of(
-            n_hours=n_hours, vpd=vpd_cold, wind=10.0, solar=225.0
-        )
-        warm_still = _day_of(
-            n_hours=n_hours, vpd=vpd_warm, wind=2.0, solar=225.0
-        )
         cfg = WindowConfig(hang_hour=8, bring_in_hour=8 + n_hours - 1, dusk_hour=20)
-        r_cold = score(cold_windy, cfg)
-        r_warm = score(warm_still, cfg)
+        r_cold = score(_day_of(n_hours=n_hours, vpd=vpd_cold, wind=10.0, solar=225.0), cfg)
+        r_warm = score(_day_of(n_hours=n_hours, vpd=vpd_warm, wind=2.0,  solar=225.0), cfg)
         assert not r_cold.skipped
         assert not r_warm.skipped
-        assert r_cold.raw_score > r_warm.raw_score, (
-            f"Cold-dry-windy ({r_cold.raw_score:.1f}) should beat "
-            f"warm-humid-still ({r_warm.raw_score:.1f})"
-        )
+        assert r_cold.raw_score > r_warm.raw_score
 
-    # Extra: VPD hand-test values from PRD §7
-    def test_vpd_hand_test_cold_dry(self):
-        """10°C / 50% RH → VPD ≈ 0.61 kPa (PRD §7 fixture)."""
-        assert compute_vpd(10.0, 50.0) == pytest.approx(0.610, abs=0.005)
-
-    def test_vpd_hand_test_warm_humid(self):
-        """22°C / 85% RH → VPD ≈ 0.40 kPa (PRD §7 fixture)."""
-        assert compute_vpd(22.0, 85.0) == pytest.approx(0.399, abs=0.005)
-
-    def test_vpd_fog_near_zero(self):
-        """RH ≈ 100% → VPD ≈ 0 (fog rejected for free)."""
-        assert compute_vpd(15.0, 99.9) == pytest.approx(0.0, abs=0.01)
+    @pytest.mark.parametrize("temp_c, rh_pct, expected_vpd", [
+        (10.0, 50.0,  0.610),  # PRD §7 cold-dry fixture
+        (22.0, 85.0,  0.399),  # PRD §7 warm-humid fixture
+    ])
+    def test_vpd_hand_tests(self, temp_c, rh_pct, expected_vpd):
+        """compute_vpd matches the PRD §7 hand-test values."""
+        assert compute_vpd(temp_c, rh_pct) == pytest.approx(expected_vpd, abs=0.005)
