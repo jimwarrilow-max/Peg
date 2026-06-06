@@ -192,6 +192,36 @@ class TestBaselineFixtures:
         result = score(hours, _window(hang=8, bring_in=8, dusk=20))
         assert result.raw_score == pytest.approx(0.0)
 
+    def test_gust_flag_set_above_32mph(self):
+        """A single gust over 32 mph sets gust_flag regardless of the overall score."""
+        hours = _day_of(n_hours=8)
+        hours[2] = _hour(h=10, gust=33.0)
+        assert score(hours, _window()).gust_flag is True
+
+    def test_gust_flag_clear_at_or_below_32mph(self):
+        hours = _day_of(n_hours=8)
+        hours[2] = _hour(h=10, gust=32.0)
+        assert score(hours, _window()).gust_flag is False
+
+    def test_too_many_missing_fields_skips(self):
+        """More than 25% unscorable hours → skipped=True (UNSCORABLE_LIMIT)."""
+        hours = _day_of(n_hours=8)
+        # Make 3 of 8 hours (37.5% > 25%) unscorable by clearing their VPD
+        for i in range(3):
+            h = hours[i]
+            hours[i] = HourForecast(
+                hour=h.hour, temp_c=h.temp_c, rh_pct=h.rh_pct,
+                vpd_kpa=None, wind_mph=h.wind_mph, solar_wm2=h.solar_wm2,
+                precip_mm=h.precip_mm, precip_prob_pct=h.precip_prob_pct,
+            )
+        result = score(hours, _window())
+        assert result.skipped is True
+
+    def test_empty_window_skips(self):
+        """hang_hour beyond dusk produces an empty window → skipped=True."""
+        result = score([], WindowConfig(hang_hour=22, bring_in_hour=8, dusk_hour=6))
+        assert result.skipped is True
+
     @pytest.mark.parametrize("raw, expected_display", [
         (72.3,  70),
         (73.0,  75),   # 73/5=14.6 → rounds to 15 → 75

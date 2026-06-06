@@ -12,7 +12,7 @@ from datetime import date
 
 import pytest
 
-from messages import _fmt_hour, _is_cold, format_message
+from messages import _fmt_hour, _is_cold, _uv_label, format_message
 from scorer import Band, HourForecast, ScoreResult, WindowConfig
 from log import LOG_PATH, _row_exists, append_prediction
 
@@ -214,6 +214,22 @@ class TestFormatMessage:
     ])
     def test_fmt_hour(self, h, expected):
         assert _fmt_hour(h) == expected
+
+    @pytest.mark.parametrize("uv, expected_label", [
+        (0.0,  "Low"),
+        (2.9,  "Low"),
+        (3.0,  "Moderate"),
+        (5.9,  "Moderate"),
+        (6.0,  "High"),
+        (7.9,  "High"),
+        (8.0,  "Very High"),
+        (10.9, "Very High"),
+        (11.0, "Extreme"),
+        (15.0, "Extreme"),
+    ])
+    def test_uv_label_thresholds(self, uv, expected_label):
+        """Each WHO UV band boundary maps to the correct label."""
+        assert _uv_label(uv) == expected_label
 
 
 # ---------------------------------------------------------------------------

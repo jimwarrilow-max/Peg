@@ -36,6 +36,7 @@ def _make_response(n: int = 24, date: str = "2026-05-30") -> dict:
             "precipitation":               [0.0             for _ in range(n)],
             "precipitation_probability":   [10.0            for _ in range(n)],
             "et0_fao_evapotranspiration":  [0.15            for _ in range(n)],
+            "uv_index":                    [float(h % 12)   for h in range(n)],
         },
         "daily": {
             "time":    [date],
@@ -43,6 +44,16 @@ def _make_response(n: int = 24, date: str = "2026-05-30") -> dict:
             "sunset":  [f"{date}T21:18"],
         },
     }
+
+
+def _make_two_day_response() -> dict:
+    """48-hour response with two daily entries — mirrors forecast_days=2 production usage."""
+    day0 = _make_response(n=48, date="2026-05-30")
+    # Patch in a second daily entry (different sunset) and second date
+    day0["daily"]["time"]    = ["2026-05-30", "2026-05-31"]
+    day0["daily"]["sunrise"] = ["2026-05-30T05:10", "2026-05-31T05:08"]
+    day0["daily"]["sunset"]  = ["2026-05-30T21:18", "2026-05-31T21:20"]
+    return day0
 
 
 def _fake_urlopen(response_dict: dict):
@@ -101,6 +112,27 @@ class TestTransformHappyPath:
         data["daily"]["sunset"][0] = "2026-05-30T00:01"
         _, dusk_hour = transform(data)
         assert dusk_hour == 0
+
+    def test_day_index_1_extracts_second_day(self):
+        """day_index=1 returns hours 0–23 of the second day — the production forecast path."""
+        data = _make_two_day_response()
+        hours, dusk_hour = transform(data, day_index=1)
+        assert len(hours) == 24
+        assert [h.hour for h in hours] == list(range(24))
+        assert dusk_hour == 21   # second day's sunset at T21:20
+
+    def test_day_index_1_has_independent_temperature(self):
+        """Hour 0 of day 1 should reflect index 24 of the API array, not index 0."""
+        data = _make_two_day_response()
+        data["hourly"]["temperature_2m"][24] = 99.0   # sentinel in day-1 hour-0
+        hours, _ = transform(data, day_index=1)
+        assert hours[0].temp_c == pytest.approx(99.0)
+
+    def test_uv_index_mapped_from_api(self):
+        """uv_index field is extracted and stored on HourForecast."""
+        hours, _ = transform(_make_response())
+        for i, h in enumerate(hours):
+            assert h.uv_index == pytest.approx(float(i % 12))
 
 
 # ---------------------------------------------------------------------------
