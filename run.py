@@ -53,7 +53,9 @@ def main() -> None:
         def _send_one(chat_id: str) -> None:
             send(message, token, chat_id)
             print(f"Telegram: sent to {chat_id}.")
-        broadcast(chat_ids, _send_one)
+        failures = broadcast(chat_ids, _send_one)
+        if failures == len(chat_ids):
+            sys.exit(1)
     else:
         print("Telegram: TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping send.")
 
