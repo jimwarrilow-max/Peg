@@ -152,7 +152,7 @@ def _mean(values: list[float]) -> Optional[float]:
 
 
 def _window_stats(hours: list[HourForecast], config: WindowConfig) -> dict:
-    end_hour = min(config.bring_in_hour, config.dusk_hour)
+    end_hour = config.end_hour
     window = [h for h in hours if config.hang_hour <= h.hour <= end_hour]
     uv_vals = [h.uv_index for h in window if h.uv_index is not None]
     return {

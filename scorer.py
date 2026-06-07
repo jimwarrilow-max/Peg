@@ -3,8 +3,10 @@ Pure scoring function for Peg / Good Drying Day.
 
 Input:  a list of HourForecast dataclasses (VPD already computed by the
         fetch-transform layer) + a WindowConfig.
-Output: ScoreResult with raw_score, band, display_score, will_dry,
-        override, best_window, and reason.
+Output: ScoreResult with raw_score, display_score, band, will_dry,
+        override, best_window, gust_flag, skipped, and display fields
+        (first_rain_hour, window_rain_hour, window_rain_prob, mean_temp_c,
+        mean_wind_mph, mean_rh_pct, peak_uv).
 
 No I/O, no network calls, no side-effects.
 """
@@ -76,6 +78,10 @@ class WindowConfig:
     hang_hour: int          # earliest hour washing goes out (0–23)
     bring_in_hour: int      # latest hour washing must be in (0–23)
     dusk_hour: int          # hour of sunset (inclusive cap)
+
+    @property
+    def end_hour(self) -> int:
+        return min(self.bring_in_hour, self.dusk_hour)
 
 
 @dataclass
@@ -152,10 +158,6 @@ def _round5(value: float) -> int:
     return int(round(value / 5.0) * 5)
 
 
-def _band_from_raw(raw: float) -> Band:
-    return band_from_raw(raw)
-
-
 def band_from_raw(raw: float) -> Band:
     """Band boundaries evaluated on the raw (unrounded) score."""
     if raw < 35:
@@ -203,7 +205,7 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
     VPD must already be computed by the caller.
     """
     # --- Determine the effective window ----------------------------------
-    end_hour = min(config.bring_in_hour, config.dusk_hour)
+    end_hour = config.end_hour
     window_hours = [h for h in range(config.hang_hour, end_hour + 1)]
 
     if not window_hours:
@@ -218,11 +220,14 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
     window_forecasts = [by_hour[h] for h in window_hours if h in by_hour]
 
     # --- Check unscorable hours ------------------------------------------
+    # Hours absent from the API response count as unscorable, not just
+    # hours that are present but field-incomplete.
+    missing    = len(window_hours) - len(window_forecasts)
     unscorable = [h for h in window_forecasts if not _is_scorable(h)]
     scorable   = [h for h in window_forecasts if _is_scorable(h)]
 
     total = len(window_hours)
-    if total > 0 and len(unscorable) / total > UNSCORABLE_LIMIT:
+    if total > 0 and (len(unscorable) + missing) / total > UNSCORABLE_LIMIT:
         return ScoreResult(
             raw_score=0, display_score=0, band=Band.TUMBLE,
             will_dry=False, override=False, best_window=None,
@@ -249,7 +254,7 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
     will_dry = cumulative >= DRY_TARGET
 
     # --- Band (on raw score) ---------------------------------------------
-    band = _band_from_raw(raw_score)
+    band = band_from_raw(raw_score)
 
     # --- Late-rain "risky bring-in" override -----------------------------
     # Final LATE_RAIN_HOURS of the window

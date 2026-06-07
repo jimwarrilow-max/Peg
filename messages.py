@@ -30,7 +30,7 @@ _UV_LABELS = [
 
 
 def _uv_label(uv: float) -> str:
-    return next(name for threshold, name in reversed(_UV_LABELS) if uv >= threshold)
+    return next((name for threshold, name in reversed(_UV_LABELS) if uv >= threshold), "Low")
 
 
 def _fmt_hour(h: int) -> str:
@@ -89,7 +89,10 @@ def format_message(
     uv       = _uv_line(result)
 
     if result.override:
-        rain_str = _fmt_hour(result.first_rain_hour) if result.first_rain_hour is not None else "later"
+        # Use the first rain in the full window for the headline timing.
+        # first_rain_hour covers only the final 2h; window_rain_hour covers everything.
+        rain_hour = result.window_rain_hour if result.window_rain_hour is not None else result.first_rain_hour
+        rain_str = _fmt_hour(rain_hour) if rain_hour is not None else "later"
         if result.band == Band.TUMBLE:
             return (
                 f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
