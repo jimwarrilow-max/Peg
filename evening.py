@@ -13,7 +13,9 @@ import sys
 from datetime import date
 
 import config
-from notify import NotifyError, send_with_keyboard
+from log import read_band
+from notify import broadcast, send_with_keyboard
+from scorer import Band
 
 
 def main() -> None:
@@ -25,24 +27,28 @@ def main() -> None:
         return
 
     today = date.today().isoformat()
+    band = read_band(today)
+    if band is None:
+        print(f"No prediction logged for {today} — skipping evening prompt.")
+        return
+    if band == Band.TUMBLE.value:
+        print(f"Peg said don't bother today — skipping evening prompt.")
+        return
     keyboard = [[
         {"text": "👍 Bone dry",   "callback_data": f"dry:{today}"},
         {"text": "👎 Still damp", "callback_data": f"damp:{today}"},
     ]]
 
-    failures = 0
-    for chat_id in chat_ids:
-        try:
-            send_with_keyboard(
-                "<b>Evening! How'd I do — did it dry?</b>\n"
-                "Honest answers make me sharper.",
-                keyboard, token, chat_id,
-            )
-            print(f"Evening prompt sent to {chat_id}.")
-        except NotifyError as exc:
-            print(f"Failed to send evening prompt to {chat_id}: {exc}", file=sys.stderr)
-            failures += 1
+    prompt = (
+        "<b>Evening! How'd I do — did it dry?</b>\n"
+        "Honest answers make me sharper."
+    )
 
+    def _send_one(chat_id: str) -> None:
+        send_with_keyboard(prompt, keyboard, token, chat_id)
+        print(f"Evening prompt sent to {chat_id}.")
+
+    failures = broadcast(chat_ids, _send_one)
     if failures == len(chat_ids):
         sys.exit(1)
 

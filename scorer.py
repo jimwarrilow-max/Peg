@@ -88,7 +88,14 @@ class ScoreResult:
     best_window: Optional[tuple[int, int]]   # (start_hour, end_hour) inclusive
     gust_flag: bool         # gusts >32 mph observed in window — independent of score
     skipped: bool           # True → data too poor to score
-    reason: str             # one-line explanation for the notification
+    # Display fields — computed once here, consumed by messages and log
+    first_rain_hour: Optional[int] = None        # first rain-gated hour in late window (override)
+    window_rain_hour: Optional[int] = None       # first rain-gated hour in full window (rain line)
+    window_rain_prob: Optional[float] = None     # precip probability at window_rain_hour
+    mean_temp_c: Optional[float] = None          # mean window temperature for display
+    mean_wind_mph: Optional[float] = None        # mean window wind speed for display
+    mean_rh_pct: Optional[float] = None          # mean window relative humidity for display
+    peak_uv: Optional[float] = None             # peak UV index in window
 
 
 # ---------------------------------------------------------------------------
@@ -204,7 +211,6 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
             raw_score=0, display_score=0, band=Band.TUMBLE,
             will_dry=False, override=False, best_window=None,
             gust_flag=False, skipped=True,
-            reason="No daylight window — check hang/bring-in config.",
         )
 
     # Index hours by hour number for easy lookup
@@ -221,7 +227,6 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
             raw_score=0, display_score=0, band=Band.TUMBLE,
             will_dry=False, override=False, best_window=None,
             gust_flag=False, skipped=True,
-            reason="Too many missing data points — skipping today rather than guessing.",
         )
 
     # --- Gust flag (independent of score) --------------------------------
@@ -264,17 +269,32 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
     scorable_window_hours = [h for h in window_hours if h in potentials]
     best_window = _find_best_window(hours, scorable_window_hours, potentials)
 
-    # --- Reason (one-liner) ----------------------------------------------
-    if override:
-        reason = f"Rain expected in the final {LATE_RAIN_HOURS}h — risky bring-in."
-    elif band == Band.CRACK:
-        reason = "Dry, breezy, and plenty of energy — ideal conditions."
-    elif band == Band.GOOD:
-        reason = "Good drying conditions across the window."
-    elif band == Band.MARGINAL:
-        reason = "Borderline — heavy items may not fully dry."
-    else:
-        reason = "Air too damp or rain in the window."
+    # --- Display fields ---------------------------------------------------
+    # first_rain_hour: first rain-gated hour in the late window (override message)
+    first_rain_hour = next(
+        (h.hour for h in late_forecasts if is_rain_gated(h)), None
+    )
+
+    # window_rain_hour / window_rain_prob: first rain-gated hour in full window (rain line)
+    window_rain_hour: Optional[int] = None
+    window_rain_prob: Optional[float] = None
+    for hnum in range(config.hang_hour, end_hour + 1):
+        h = by_hour.get(hnum)
+        if h and is_rain_gated(h):
+            window_rain_hour = hnum
+            window_rain_prob = h.precip_prob_pct
+            break
+
+    # Mean conditions and peak UV over the full window (for display only)
+    def _fmean(vals: list) -> Optional[float]:
+        clean = [v for v in vals if v is not None]
+        return round(sum(clean) / len(clean), 1) if clean else None
+
+    mean_temp_c   = _fmean([h.temp_c   for h in window_forecasts])
+    mean_wind_mph = _fmean([h.wind_mph  for h in window_forecasts])
+    mean_rh_pct   = _fmean([h.rh_pct   for h in window_forecasts])
+    uv_vals = [h.uv_index for h in window_forecasts if h.uv_index is not None]
+    peak_uv = round(max(uv_vals), 1) if uv_vals else None
 
     return ScoreResult(
         raw_score=raw_score,
@@ -285,5 +305,11 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
         best_window=best_window,
         gust_flag=gust_flag,
         skipped=False,
-        reason=reason,
+        first_rain_hour=first_rain_hour,
+        window_rain_hour=window_rain_hour,
+        window_rain_prob=window_rain_prob,
+        mean_temp_c=mean_temp_c,
+        mean_wind_mph=mean_wind_mph,
+        mean_rh_pct=mean_rh_pct,
+        peak_uv=peak_uv,
     )

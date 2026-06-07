@@ -20,7 +20,7 @@ import config
 from fetch import FetchError, fetch_forecast
 from log import append_prediction
 from messages import SKIPPED_MSG, format_message
-from notify import NotifyError, send
+from notify import NotifyError, broadcast, send
 from scorer import WindowConfig, score
 
 
@@ -42,7 +42,7 @@ def main() -> None:
     result = score(hours, cfg)
 
     # --- Format ----------------------------------------------------------
-    message = format_message(result, config.HANG_HOUR, config.BRING_IN_HOUR, dusk_hour, hours)
+    message = format_message(result, config.HANG_HOUR, config.BRING_IN_HOUR, dusk_hour)
     print(message)
 
     # --- Notify ----------------------------------------------------------
@@ -50,12 +50,10 @@ def main() -> None:
     chat_ids = config.chat_ids()
 
     if token and chat_ids:
-        for chat_id in chat_ids:
-            try:
-                send(message, token, chat_id)
-                print(f"Telegram: sent to {chat_id}.")
-            except NotifyError as exc:
-                print(f"Telegram: failed for {chat_id} — {exc}", file=sys.stderr)
+        def _send_one(chat_id: str) -> None:
+            send(message, token, chat_id)
+            print(f"Telegram: sent to {chat_id}.")
+        broadcast(chat_ids, _send_one)
     else:
         print("Telegram: TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping send.")
 
@@ -70,11 +68,7 @@ def _fail(reason: str) -> None:
     print(f"\nPeg's drawn a blank — {reason}", file=sys.stderr)
     token = os.environ.get("TELEGRAM_TOKEN")
     if token:
-        for chat_id in config.chat_ids():
-            try:
-                send(SKIPPED_MSG, token, chat_id)
-            except NotifyError:
-                pass
+        broadcast(config.chat_ids(), lambda cid: send(SKIPPED_MSG, token, cid))
     sys.exit(1)
 
 

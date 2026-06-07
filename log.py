@@ -92,6 +92,18 @@ def append_prediction(
 # Helpers
 # ---------------------------------------------------------------------------
 
+def read_band(date_str: str, log_path: str = LOG_PATH) -> Optional[str]:
+    """Return the stored band value for date_str, or None if not found."""
+    if not os.path.isfile(log_path):
+        return None
+    with open(log_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            if row.get("date") == date_str:
+                return row.get("band")
+    return None
+
+
 def write_outcome(
     date_str: str,
     outcome: str,

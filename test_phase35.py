@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from log import write_outcome, append_prediction
+from log import write_outcome, append_prediction, read_band
 from scorer import Band, HourForecast, ScoreResult, WindowConfig, round_display
 
 
@@ -29,7 +29,6 @@ def _make_log(tmp_path, dates: list[str]) -> str:
             raw_score=75.0, display_score=75, band=Band.GOOD,
             will_dry=True, override=False, best_window=(9, 14),
             gust_flag=False, skipped=False,
-            reason="Good conditions.",
         )
         cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
         hours = [
@@ -90,6 +89,78 @@ class TestWriteOutcome:
         write_outcome("2026-05-30", "dry",  log_path=log_path)
         write_outcome("2026-05-30", "damp", log_path=log_path)
         assert _read_log(log_path)[0]["outcome"] == "damp"
+
+
+# ---------------------------------------------------------------------------
+# log.read_band
+# ---------------------------------------------------------------------------
+
+class TestReadBand:
+
+    def test_returns_band_for_existing_date(self, tmp_path):
+        log_path = _make_log(tmp_path, ["2026-05-30"])
+        assert read_band("2026-05-30", log_path=log_path) == Band.GOOD.value
+
+    def test_returns_none_for_missing_date(self, tmp_path):
+        log_path = _make_log(tmp_path, ["2026-05-30"])
+        assert read_band("2026-05-31", log_path=log_path) is None
+
+    def test_returns_none_for_missing_file(self, tmp_path):
+        assert read_band("2026-05-30", log_path=str(tmp_path / "nope.csv")) is None
+
+
+# ---------------------------------------------------------------------------
+# evening.py — prompt gating
+# ---------------------------------------------------------------------------
+
+class TestEveningGating:
+
+    def _run_evening(self, log_path: str, tmp_path, band: Band = Band.GOOD) -> list[str]:
+        """Run evening.main() with a log entry for today; return sent chat_ids."""
+        import evening
+        from log import append_prediction
+        from scorer import WindowConfig
+        today = date.today().isoformat()
+        result = ScoreResult(
+            raw_score=75.0, display_score=75, band=band,
+            will_dry=True, override=False, best_window=(9, 14),
+            gust_flag=False, skipped=False,
+        )
+        cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
+        hours = [
+            HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
+                         wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
+                         precip_prob_pct=5.0)
+            for i in range(24)
+        ]
+        append_prediction(date.today(), result, cfg, hours, log_path=log_path)
+
+        sent_to = []
+        def fake_send_with_keyboard(msg, kb, token, chat_id):
+            sent_to.append(chat_id)
+
+        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
+             patch("evening.read_band", return_value=band.value), \
+             patch("evening.send_with_keyboard", fake_send_with_keyboard):
+            evening.main()
+        return sent_to
+
+    @pytest.mark.parametrize("band", [Band.CRACK, Band.GOOD, Band.MARGINAL])
+    def test_sends_prompt_on_positive_bands(self, band, tmp_path):
+        sent = self._run_evening(str(tmp_path / "log.csv"), tmp_path, band=band)
+        assert sent == ["111"]
+
+    def test_skips_prompt_on_tumble(self, tmp_path):
+        sent = self._run_evening(str(tmp_path / "log.csv"), tmp_path, band=Band.TUMBLE)
+        assert sent == []
+
+    def test_skips_prompt_when_no_log_entry(self, tmp_path):
+        import evening
+        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
+             patch("evening.read_band", return_value=None), \
+             patch("evening.send_with_keyboard") as mock_send:
+            evening.main()
+        mock_send.assert_not_called()
 
 
 # ---------------------------------------------------------------------------

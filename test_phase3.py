@@ -12,7 +12,7 @@ from datetime import date
 
 import pytest
 
-from messages import _fmt_hour, _is_cold, _uv_label, format_message
+from messages import _fmt_hour, _uv_label, format_message
 from scorer import Band, HourForecast, ScoreResult, WindowConfig
 from log import LOG_PATH, _row_exists, append_prediction
 
@@ -29,6 +29,13 @@ def _result(
     skipped: bool = False,
     best_window: tuple | None = (9, 14),
     gust_flag: bool = False,
+    first_rain_hour: int | None = None,
+    window_rain_hour: int | None = None,
+    window_rain_prob: float | None = None,
+    mean_temp_c: float | None = 18.0,
+    mean_wind_mph: float | None = 8.0,
+    mean_rh_pct: float | None = 60.0,
+    peak_uv: float | None = None,
 ) -> ScoreResult:
     from scorer import round_display
     return ScoreResult(
@@ -40,7 +47,13 @@ def _result(
         best_window=best_window,
         gust_flag=gust_flag,
         skipped=skipped,
-        reason="Good drying conditions across the window.",
+        first_rain_hour=first_rain_hour,
+        window_rain_hour=window_rain_hour,
+        window_rain_prob=window_rain_prob,
+        mean_temp_c=mean_temp_c,
+        mean_wind_mph=mean_wind_mph,
+        mean_rh_pct=mean_rh_pct,
+        peak_uv=peak_uv,
     )
 
 
@@ -55,17 +68,6 @@ def _hours(n: int = 24, temp_c: float = 18.0, rh_pct: float = 60.0) -> list[Hour
     ]
 
 
-def _hours_with_uv(uv: float = 5.0) -> list[HourForecast]:
-    return [
-        HourForecast(
-            hour=i, temp_c=18.0, rh_pct=60.0,
-            vpd_kpa=0.7, wind_mph=8.0, solar_wm2=300.0,
-            precip_mm=0.0, precip_prob_pct=5.0, uv_index=uv,
-        )
-        for i in range(24)
-    ]
-
-
 def _cfg(hang: int = 9, bring_in: int = 18, dusk: int = 21) -> WindowConfig:
     return WindowConfig(hang_hour=hang, bring_in_hour=bring_in, dusk_hour=dusk)
 
@@ -77,7 +79,7 @@ def _cfg(hang: int = 9, bring_in: int = 18, dusk: int = 21) -> WindowConfig:
 class TestFormatMessage:
 
     def test_skipped_message(self):
-        msg = format_message(_result(skipped=True), 9, 18, 21, _hours())
+        msg = format_message(_result(skipped=True), 9, 18, 21)
         assert "blank" in msg
         assert "no verdict" in msg
 
@@ -89,119 +91,99 @@ class TestFormatMessage:
     ])
     def test_band_message_contains_score_and_keyword(self, band, raw, will_dry, keyword):
         """Each band produces the right voice copy and includes the score."""
-        msg = format_message(_result(raw_score=raw, band=band, will_dry=will_dry), 9, 18, 21, _hours())
+        msg = format_message(_result(raw_score=raw, band=band, will_dry=will_dry), 9, 18, 21)
         assert str(int(round(raw / 5) * 5)) in msg
         assert keyword in msg.lower()
 
     def test_override_message(self):
-        # Make the final 2h of the window rain-gated
-        hours = _hours()
-        for i in (17, 18):
-            hours[i] = HourForecast(
-                hour=i, temp_c=18.0, rh_pct=70.0,
-                vpd_kpa=0.5, wind_mph=5.0, solar_wm2=100.0,
-                precip_mm=0.0, precip_prob_pct=80.0,
-            )
-        msg = format_message(_result(override=True, band=Band.MARGINAL), 9, 18, 21, hours)
+        msg = format_message(
+            _result(override=True, band=Band.MARGINAL, first_rain_hour=17),
+            9, 18, 21,
+        )
         assert "cautious" in msg.lower()
         assert "⚠" in msg
 
     def test_override_tumble_shows_tumble_with_rain_info(self):
         """Override + TUMBLE → tumble message that still mentions the rain timing and shows score."""
-        hours = _hours()
-        hours[17] = HourForecast(
-            hour=17, temp_c=15.0, rh_pct=90.0,
-            vpd_kpa=0.1, wind_mph=5.0, solar_wm2=50.0,
-            precip_mm=0.0, precip_prob_pct=80.0,
+        msg = format_message(
+            _result(override=True, raw_score=2.0, band=Band.TUMBLE, will_dry=False, first_rain_hour=17),
+            9, 18, 21,
         )
-        msg = format_message(_result(override=True, raw_score=2.0, band=Band.TUMBLE, will_dry=False), 9, 18, 21, hours)
         assert "cautious" not in msg.lower()
         assert "don't bother" in msg.lower()
-        assert "0" in msg           # score shown
-        assert "rain" in msg.lower()  # rain mentioned
+        assert "0" in msg
+        assert "rain" in msg.lower()
 
     def test_override_shows_score(self):
-        hours = _hours()
-        hours[17] = HourForecast(
-            hour=17, temp_c=18.0, rh_pct=70.0,
-            vpd_kpa=0.5, wind_mph=5.0, solar_wm2=100.0,
-            precip_mm=0.0, precip_prob_pct=80.0,
+        msg = format_message(
+            _result(override=True, raw_score=65.0, band=Band.MARGINAL, first_rain_hour=17),
+            9, 18, 21,
         )
-        msg = format_message(_result(override=True, raw_score=65.0, band=Band.MARGINAL), 9, 18, 21, hours)
         assert "65" in msg
 
     def test_conditions_line_present(self):
         """All non-skipped messages include temperature, wind, and humidity."""
-        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21, _hours())
+        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21)
         assert "°C" in msg
         assert "mph" in msg
         assert "humidity" in msg
 
     def test_rain_line_shown_when_rain_in_window(self):
-        """Rain timing line appears when a window hour is rain-gated."""
-        hours = _hours()
-        hours[15] = HourForecast(
-            hour=15, temp_c=15.0, rh_pct=80.0,
-            vpd_kpa=0.3, wind_mph=8.0, solar_wm2=100.0,
-            precip_mm=0.0, precip_prob_pct=70.0,
+        """Rain timing line appears when window_rain_hour is set on result."""
+        msg = format_message(
+            _result(raw_score=65.0, band=Band.GOOD, window_rain_hour=15, window_rain_prob=70.0),
+            9, 18, 21,
         )
-        msg = format_message(_result(raw_score=65.0, band=Band.GOOD), 9, 18, 21, hours)
         assert "🌧️" in msg
         assert "70%" in msg
 
     def test_rain_line_absent_when_no_rain(self):
         """No rain line on a clear day."""
-        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, _hours())
+        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21)
         assert "🌧️" not in msg
 
     def test_rain_from_start_of_window(self):
         """When rain starts at hang hour, shows 'Rain from 9am' without dry prefix."""
-        hours = _hours()
-        hours[9] = HourForecast(
-            hour=9, temp_c=15.0, rh_pct=80.0,
-            vpd_kpa=0.3, wind_mph=8.0, solar_wm2=100.0,
-            precip_mm=0.0, precip_prob_pct=80.0,
+        msg = format_message(
+            _result(raw_score=20.0, band=Band.TUMBLE, will_dry=False, window_rain_hour=9, window_rain_prob=80.0),
+            9, 18, 21,
         )
-        msg = format_message(_result(raw_score=20.0, band=Band.TUMBLE, will_dry=False), 9, 18, 21, hours)
         assert "Rain from 9am" in msg
         assert "Dry till" not in msg
 
     def test_override_never_shows_good_band(self):
         """INV-07 reflected in the message: override → no 'Good drying day' wording."""
-        hours = _hours()
-        hours[17] = HourForecast(
-            hour=17, temp_c=18.0, rh_pct=70.0,
-            vpd_kpa=0.5, wind_mph=5.0, solar_wm2=100.0,
-            precip_mm=0.5, precip_prob_pct=90.0,
+        msg = format_message(
+            _result(override=True, raw_score=82.0, band=Band.MARGINAL, first_rain_hour=17),
+            9, 18, 21,
         )
-        msg = format_message(_result(override=True, raw_score=82.0, band=Band.MARGINAL), 9, 18, 21, hours)
         assert "Good drying day" not in msg
         assert "Crack open the pegs" not in msg
 
     def test_cold_gloat_appended_on_cold_crack_day(self):
         """Cold + Crack → gloat line appended."""
-        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, _hours(temp_c=10.0))
+        msg = format_message(_result(raw_score=90.0, band=Band.CRACK, mean_temp_c=10.0), 9, 18, 21)
         assert "Nippy" in msg
 
     def test_no_gloat_on_warm_crack_day(self):
-        msg = format_message(_result(raw_score=90.0, band=Band.CRACK), 9, 18, 21, _hours(temp_c=22.0))
+        msg = format_message(_result(raw_score=90.0, band=Band.CRACK, mean_temp_c=22.0), 9, 18, 21)
         assert "Nippy" not in msg
 
     def test_html_bold_present(self):
         """Messages use HTML bold tags for Telegram."""
-        msg = format_message(_result(raw_score=85.0, band=Band.CRACK), 9, 18, 21, _hours())
+        msg = format_message(_result(raw_score=85.0, band=Band.CRACK), 9, 18, 21)
         assert "<b>" in msg and "</b>" in msg
 
     def test_uv_line_shown_when_uv_present(self):
-        """UV index line appears when window hours have UV data."""
-        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21, _hours_with_uv(uv=5.0))
+        """UV index line appears when peak_uv is set on result."""
+        msg = format_message(_result(raw_score=75.0, band=Band.GOOD, peak_uv=5.0), 9, 18, 21)
         assert "☀️" in msg
         assert "UV" in msg
         assert "Moderate" in msg
 
     def test_uv_line_absent_when_no_uv_data(self):
-        """No UV line when uv_index is None for all hours."""
-        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21, _hours())
+        """No UV line when peak_uv is None."""
+        msg = format_message(_result(raw_score=75.0, band=Band.GOOD, peak_uv=None), 9, 18, 21)
         assert "☀️" not in msg
 
     @pytest.mark.parametrize("h, expected", [
