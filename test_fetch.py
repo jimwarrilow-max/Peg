@@ -189,6 +189,8 @@ class TestNullFieldHandling:
         ("shortwave_radiation",      "solar_wm2",        2),
         ("precipitation",            "precip_mm",       10),
         ("precipitation_probability","precip_prob_pct", 10),
+        ("uv_index",                 "uv_index",         5),
+        ("wind_gusts_10m",           "wind_gust_mph",    3),
     ])
     def test_null_value_gives_none(self, api_field, attr, idx):
         data = _make_response()

@@ -222,6 +222,29 @@ class TestBaselineFixtures:
         result = score([], WindowConfig(hang_hour=22, bring_in_hour=8, dusk_hour=6))
         assert result.skipped is True
 
+    def test_missing_hours_count_as_unscorable(self):
+        """Hours absent from the forecast list count toward the unscorable fraction."""
+        # Window is 8–15 (8 hours); only hours 8–12 supplied → 3/8 = 37.5% > UNSCORABLE_LIMIT
+        hours = _day_of(n_hours=5, start_hour=8)
+        result = score(hours, _window(hang=8, bring_in=15, dusk=20))
+        assert result.skipped is True
+
+    def test_window_rain_hour_set_to_first_gated_hour(self):
+        """score() sets window_rain_hour to the first rain-gated hour in the window."""
+        hours = (
+            [_hour(h=h, precip_prob=0.0)  for h in range(8, 12)] +
+            [_hour(h=h, precip_prob=80.0) for h in range(12, 16)]
+        )
+        result = score(hours, _window(hang=8, bring_in=15, dusk=20))
+        assert result.window_rain_hour == 12
+        assert result.window_rain_prob == pytest.approx(80.0)
+
+    def test_window_rain_hour_none_on_clear_day(self):
+        """score() sets window_rain_hour to None when no hours are rain-gated."""
+        result = score(_day_of(n_hours=8), _window())
+        assert result.window_rain_hour is None
+        assert result.window_rain_prob is None
+
     @pytest.mark.parametrize("raw, expected_display", [
         (72.3,  70),
         (73.0,  75),   # 73/5=14.6 → rounds to 15 → 75
