@@ -70,17 +70,6 @@ def _uv_line(result: ScoreResult) -> str:
     return f"\n☀️ UV index: {result.peak_uv:.0f} ({_uv_label(result.peak_uv)})"
 
 
-def _half_scores_line(result: ScoreResult) -> str:
-    if result.morning_score is None:
-        return ""
-    m_str = f"{_fmt_hour(result.morning_window[0])}–{_fmt_hour(result.morning_window[1])}"
-    a_str = f"{_fmt_hour(result.afternoon_window[0])}–{_fmt_hour(result.afternoon_window[1])}"
-    return (
-        f"\n📊 Morning {m_str}: {result.morning_score}/100"
-        f" · Afternoon {a_str}: {result.afternoon_score}/100"
-    )
-
-
 def format_message(
     result: ScoreResult,
     hang_hour: int,
@@ -91,14 +80,11 @@ def format_message(
     if result.skipped:
         return SKIPPED_MSG
 
-    score    = result.display_score
-    hang_str = _fmt_hour(hang_hour)
-
+    score      = result.display_score
     window_end = min(bring_in_hour, dusk_hour)
-    cond     = _conditions_line(result)
-    rain     = _rain_line(result, hang_hour)
-    uv       = _uv_line(result)
-    halves   = _half_scores_line(result)
+    cond       = _conditions_line(result)
+    rain       = _rain_line(result, hang_hour)
+    uv         = _uv_line(result)
 
     if result.override:
         # Use the first rain in the full window for the headline timing.
@@ -110,41 +96,48 @@ def format_message(
                 f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
                 f"Air'll be too damp to dry anything — and rain arrives at {rain_str} "
                 f"before bring-in time anyway."
-                f"{cond}{rain}{uv}{halves}"
+                f"{cond}{rain}{uv}"
             )
         return (
             f"⚠️ <b>Peg's cautious — {score}/100.</b> Good drying till {rain_str}, "
             f"then rain before bring-in time. Fine if you're home to dash it in early "
             f"— risky if you're out all day."
-            f"{cond}{rain}{uv}{halves}"
+            f"{cond}{rain}{uv}"
         )
 
+    # Recommended hang and bring-in times from the best scoring window
+    start_hour = result.best_window[0] if result.best_window else hang_hour
     end_hour   = result.best_window[1] if result.best_window else window_end
+    start_str  = _fmt_hour(start_hour)
     dry_by_str = _fmt_hour(end_hour)
+    # "Out by 9am" when window starts at the earliest possible time; "Hold off till 1pm" otherwise
+    hang_advice = f"Out by {start_str}" if start_hour == hang_hour else f"Hold off till {start_str}"
 
     if result.band == Band.CRACK:
         cold = result.mean_temp_c is not None and result.mean_temp_c < _COLD_GLOAT_THRESHOLD_C
         gloat = _GLOAT_LINE if cold else ""
         return (
             f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
-            f"Out by {hang_str} and it'll be crisp by {dry_by_str}.{gloat}"
-            f"{cond}{rain}{uv}{halves}"
+            f"{hang_advice} — it'll be crisp by {dry_by_str}.{gloat}"
+            f"{cond}{rain}{uv}"
         )
 
     if result.band == Band.GOOD:
         return (
             f"🧺 <b>Peg's verdict: {score}/100. A solid one.</b> "
-            f"Out by {hang_str}, in by {dry_by_str}. "
+            f"{hang_advice}, in by {dry_by_str}. "
             f"Won't break records, but it'll get the job done."
-            f"{cond}{rain}{uv}{halves}"
+            f"{cond}{rain}{uv}"
         )
 
     if result.band == Band.MARGINAL:
+        window_tip = f" Best window: {start_str}–{dry_by_str}." if result.best_window else ""
         return (
             f"🧺 <b>Peg's on the fence — {score}/100.</b> "
             f"It'll <i>probably</i> dry if you're about to dash it in, "
             f"but the heavy stuff might sulk. I'd risk a light load, not the towels."
-            f"{cond}{rain}{uv}{halves}"
+            f"{window_tip}"
+            f"{cond}{rain}{uv}"
         )
 
     # Band.TUMBLE
@@ -152,5 +145,5 @@ def format_message(
         f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
         f"Air'll be too damp to take anything off your hands. "
         f"Tumble dryer, or hold on."
-        f"{cond}{rain}{uv}{halves}"
+        f"{cond}{rain}{uv}"
     )

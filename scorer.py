@@ -102,10 +102,6 @@ class ScoreResult:
     mean_wind_mph: Optional[float] = None        # mean window wind speed for display
     mean_rh_pct: Optional[float] = None          # mean window relative humidity for display
     peak_uv: Optional[float] = None             # peak UV index in window
-    morning_score:    Optional[int]             = None  # mean-potential score 0-100 for first half
-    morning_window:   Optional[tuple[int, int]] = None  # (start_hour, end_hour) inclusive
-    afternoon_score:  Optional[int]             = None
-    afternoon_window: Optional[tuple[int, int]] = None
 
 
 # ---------------------------------------------------------------------------
@@ -305,22 +301,6 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
     uv_vals = [h.uv_index for h in window_forecasts if h.uv_index is not None]
     peak_uv = round(max(uv_vals), 1) if uv_vals else None
 
-    # --- Half-window breakdown (morning / afternoon) ----------------------
-    morning_score = morning_window = afternoon_score = afternoon_window = None
-    if len(window_hours) >= 6:
-        mid = len(window_hours) // 2
-        morn = window_hours[:mid]
-        aftn = window_hours[mid:]
-
-        def _half(hrs: list[int]) -> tuple[Optional[int], Optional[tuple[int, int]]]:
-            if not hrs:
-                return None, None
-            pot = sum(potentials.get(h, 0.0) for h in hrs)
-            return round_display(min(100.0, 100.0 * pot / len(hrs))), (hrs[0], hrs[-1])
-
-        morning_score,   morning_window   = _half(morn)
-        afternoon_score, afternoon_window = _half(aftn)
-
     return ScoreResult(
         raw_score=raw_score,
         display_score=display_score,
@@ -337,8 +317,4 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
         mean_wind_mph=mean_wind_mph,
         mean_rh_pct=mean_rh_pct,
         peak_uv=peak_uv,
-        morning_score=morning_score,
-        morning_window=morning_window,
-        afternoon_score=afternoon_score,
-        afternoon_window=afternoon_window,
     )
