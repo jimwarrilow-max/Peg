@@ -70,6 +70,17 @@ def _uv_line(result: ScoreResult) -> str:
     return f"\n☀️ UV index: {result.peak_uv:.0f} ({_uv_label(result.peak_uv)})"
 
 
+def _half_scores_line(result: ScoreResult) -> str:
+    if result.morning_score is None:
+        return ""
+    m_str = f"{_fmt_hour(result.morning_window[0])}–{_fmt_hour(result.morning_window[1])}"
+    a_str = f"{_fmt_hour(result.afternoon_window[0])}–{_fmt_hour(result.afternoon_window[1])}"
+    return (
+        f"\n📊 Morning {m_str}: {result.morning_score}/100"
+        f" · Afternoon {a_str}: {result.afternoon_score}/100"
+    )
+
+
 def format_message(
     result: ScoreResult,
     hang_hour: int,
@@ -87,6 +98,7 @@ def format_message(
     cond     = _conditions_line(result)
     rain     = _rain_line(result, hang_hour)
     uv       = _uv_line(result)
+    halves   = _half_scores_line(result)
 
     if result.override:
         # Use the first rain in the full window for the headline timing.
@@ -98,13 +110,13 @@ def format_message(
                 f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
                 f"Air'll be too damp to dry anything — and rain arrives at {rain_str} "
                 f"before bring-in time anyway."
-                f"{cond}{rain}{uv}"
+                f"{cond}{rain}{uv}{halves}"
             )
         return (
             f"⚠️ <b>Peg's cautious — {score}/100.</b> Good drying till {rain_str}, "
             f"then rain before bring-in time. Fine if you're home to dash it in early "
             f"— risky if you're out all day."
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{uv}{halves}"
         )
 
     end_hour   = result.best_window[1] if result.best_window else window_end
@@ -116,7 +128,7 @@ def format_message(
         return (
             f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
             f"Out by {hang_str} and it'll be crisp by {dry_by_str}.{gloat}"
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{uv}{halves}"
         )
 
     if result.band == Band.GOOD:
@@ -124,7 +136,7 @@ def format_message(
             f"🧺 <b>Peg's verdict: {score}/100. A solid one.</b> "
             f"Out by {hang_str}, in by {dry_by_str}. "
             f"Won't break records, but it'll get the job done."
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{uv}{halves}"
         )
 
     if result.band == Band.MARGINAL:
@@ -132,7 +144,7 @@ def format_message(
             f"🧺 <b>Peg's on the fence — {score}/100.</b> "
             f"It'll <i>probably</i> dry if you're about to dash it in, "
             f"but the heavy stuff might sulk. I'd risk a light load, not the towels."
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{uv}{halves}"
         )
 
     # Band.TUMBLE
@@ -140,5 +152,5 @@ def format_message(
         f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
         f"Air'll be too damp to take anything off your hands. "
         f"Tumble dryer, or hold on."
-        f"{cond}{rain}{uv}"
+        f"{cond}{rain}{uv}{halves}"
     )

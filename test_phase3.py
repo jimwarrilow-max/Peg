@@ -36,6 +36,10 @@ def _result(
     mean_wind_mph: float | None = 8.0,
     mean_rh_pct: float | None = 60.0,
     peak_uv: float | None = None,
+    morning_score: int | None = None,
+    morning_window: tuple | None = None,
+    afternoon_score: int | None = None,
+    afternoon_window: tuple | None = None,
 ) -> ScoreResult:
     from scorer import round_display
     return ScoreResult(
@@ -54,6 +58,10 @@ def _result(
         mean_wind_mph=mean_wind_mph,
         mean_rh_pct=mean_rh_pct,
         peak_uv=peak_uv,
+        morning_score=morning_score,
+        morning_window=morning_window,
+        afternoon_score=afternoon_score,
+        afternoon_window=afternoon_window,
     )
 
 
@@ -295,3 +303,76 @@ class TestLog:
             _cfg(), _hours(), tmp_path
         )
         assert rows[0]["skipped"] == "True"
+
+
+# ---------------------------------------------------------------------------
+# Half-window breakdown
+# ---------------------------------------------------------------------------
+
+class TestHalfScores:
+
+    def test_breakdown_line_present_in_message(self):
+        r = _result(morning_score=80, morning_window=(9, 13), afternoon_score=40, afternoon_window=(14, 18))
+        msg = format_message(r, 9, 18, 21)
+        assert "📊" in msg
+        assert "9am" in msg
+        assert "1pm" in msg
+        assert "80/100" in msg
+        assert "40/100" in msg
+
+    def test_breakdown_line_absent_when_none(self):
+        r = _result(morning_score=None, morning_window=None, afternoon_score=None, afternoon_window=None)
+        msg = format_message(r, 9, 18, 21)
+        assert "📊" not in msg
+
+    def test_breakdown_appears_in_all_bands(self):
+        kwargs = dict(morning_score=60, morning_window=(9, 13), afternoon_score=20, afternoon_window=(14, 18))
+        for band, raw in [(Band.CRACK, 85.0), (Band.GOOD, 65.0), (Band.MARGINAL, 45.0), (Band.TUMBLE, 15.0)]:
+            msg = format_message(_result(raw_score=raw, band=band, will_dry=raw >= 55, **kwargs), 9, 18, 21)
+            assert "📊" in msg, f"Missing breakdown in {band}"
+
+    def test_breakdown_appears_in_override_messages(self):
+        kwargs = dict(morning_score=70, morning_window=(9, 13), afternoon_score=10, afternoon_window=(14, 18))
+        msg = format_message(
+            _result(override=True, band=Band.MARGINAL, window_rain_hour=16, **kwargs), 9, 18, 21
+        )
+        assert "📊" in msg
+
+    def test_scorer_produces_half_scores_10h_window(self):
+        from scorer import score, WindowConfig, HourForecast
+        hours = [
+            HourForecast(hour=h, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.8,
+                         wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0, precip_prob_pct=5.0)
+            for h in range(9, 19)
+        ]
+        cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
+        result = score(hours, cfg)
+        assert result.morning_score is not None
+        assert result.afternoon_score is not None
+        assert result.morning_window == (9, 13)
+        assert result.afternoon_window == (14, 18)
+
+    def test_scorer_no_breakdown_short_window(self):
+        from scorer import score, WindowConfig, HourForecast
+        hours = [
+            HourForecast(hour=h, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.8,
+                         wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0, precip_prob_pct=5.0)
+            for h in range(9, 14)
+        ]
+        cfg = WindowConfig(hang_hour=9, bring_in_hour=13, dusk_hour=21)
+        result = score(hours, cfg)
+        assert result.morning_score is None
+
+    def test_rainy_morning_scores_zero(self):
+        from scorer import score, WindowConfig, HourForecast
+        hours = [
+            HourForecast(hour=h, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.8,
+                         wind_mph=8.0, solar_wm2=300.0,
+                         precip_mm=1.0 if h < 14 else 0.0,
+                         precip_prob_pct=80.0 if h < 14 else 5.0)
+            for h in range(9, 19)
+        ]
+        cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
+        result = score(hours, cfg)
+        assert result.morning_score == 0
+        assert result.afternoon_score > 0
