@@ -293,7 +293,7 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
     # Mean conditions and peak UV over the full window (for display only)
     def _fmean(vals: list) -> Optional[float]:
         clean = [v for v in vals if v is not None]
-        return round(sum(clean) / len(clean), 1) if clean else None
+        return round(sum(clean) / len(clean), 3) if clean else None
 
     mean_temp_c   = _fmean([h.temp_c   for h in window_forecasts])
     mean_wind_mph = _fmean([h.wind_mph  for h in window_forecasts])

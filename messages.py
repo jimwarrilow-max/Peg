@@ -55,12 +55,12 @@ def _conditions_line(result: ScoreResult) -> str:
 def _rain_line(result: ScoreResult, hang_hour: int) -> str:
     if result.window_rain_hour is None:
         return ""
-    prob_str = f"{int(result.window_rain_prob or 0)}%"
+    prob_str = f" ({int(result.window_rain_prob)}%)" if result.window_rain_prob is not None else ""
     if result.window_rain_hour <= hang_hour:
-        return f"\n🌧️ Rain from {_fmt_hour(result.window_rain_hour)} ({prob_str})"
+        return f"\n🌧️ Rain from {_fmt_hour(result.window_rain_hour)}{prob_str}"
     return (
         f"\n🌧️ Dry till {_fmt_hour(result.window_rain_hour - 1)}"
-        f" · Rain from {_fmt_hour(result.window_rain_hour)} ({prob_str})"
+        f" · Rain from {_fmt_hour(result.window_rain_hour)}{prob_str}"
     )
 
 
@@ -80,9 +80,8 @@ def format_message(
     if result.skipped:
         return SKIPPED_MSG
 
-    score      = result.display_score
-    window_end = min(bring_in_hour, dusk_hour)
-    cond       = _conditions_line(result)
+    score = result.display_score
+    cond  = _conditions_line(result)
     rain       = _rain_line(result, hang_hour)
     uv         = _uv_line(result)
 
@@ -106,6 +105,7 @@ def format_message(
         )
 
     # Recommended hang and bring-in times from the best scoring window
+    window_end = min(bring_in_hour, dusk_hour)
     start_hour = result.best_window[0] if result.best_window else hang_hour
     end_hour   = result.best_window[1] if result.best_window else window_end
     start_str  = _fmt_hour(start_hour)
