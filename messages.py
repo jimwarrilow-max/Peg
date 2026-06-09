@@ -14,11 +14,8 @@ from scorer import Band, ScoreResult
 
 SKIPPED_MSG = (
     "<b>Peg's drawn a blank</b> — couldn't get a clean read on tomorrow, "
-    "so no verdict rather than a bad one. Back tomorrow evening."
+    "so no verdict rather than a bad one. Back tomorrow around 5pm."
 )
-
-_COLD_GLOAT_THRESHOLD_C = 15.0
-_GLOAT_LINE = " Nippy, isn't it? Cold, dry and breezy beats warm and muggy every time."
 
 _UV_LABELS = [
     (0,   "Low"),
@@ -97,10 +94,11 @@ def format_message(
                 f"before bring-in time anyway."
                 f"{cond}{rain}{uv}"
             )
+        window_tip = f" Best window: {_fmt_hour(result.best_window[0])}–{_fmt_hour(result.best_window[1])}." if result.best_window else ""
         return (
-            f"⚠️ <b>Peg's cautious — {score}/100.</b> Good drying till {rain_str}, "
+            f"⚠️ <b>Peg's cautious — {score}/100.</b> Drying conditions hold till {rain_str}, "
             f"then rain before bring-in time. Fine if you're home to dash it in early "
-            f"— risky if you're out all day."
+            f"— risky if you're out all day.{window_tip}"
             f"{cond}{rain}{uv}"
         )
 
@@ -114,11 +112,9 @@ def format_message(
     hang_advice = f"Out by {start_str}" if start_hour == hang_hour else f"Hold off till {start_str}"
 
     if result.band == Band.CRACK:
-        cold = result.mean_temp_c is not None and result.mean_temp_c < _COLD_GLOAT_THRESHOLD_C
-        gloat = _GLOAT_LINE if cold else ""
         return (
             f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
-            f"{hang_advice} — it'll be crisp by {dry_by_str}.{gloat}"
+            f"{hang_advice} — it'll be crisp by {dry_by_str}."
             f"{cond}{rain}{uv}"
         )
 

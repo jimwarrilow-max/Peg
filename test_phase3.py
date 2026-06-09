@@ -102,6 +102,8 @@ class TestFormatMessage:
         )
         assert "cautious" in msg.lower()
         assert "⚠" in msg
+        assert "Good drying" not in msg
+        assert "Drying conditions hold" in msg
 
     def test_override_tumble_shows_tumble_with_rain_info(self):
         """Override + TUMBLE → tumble message that still mentions the rain timing and shows score."""
@@ -214,14 +216,22 @@ class TestFormatMessage:
         msg = format_message(_result(raw_score=40.0, band=Band.MARGINAL, best_window=None), 9, 18, 21)
         assert "Best window" not in msg
 
-    def test_cold_gloat_appended_on_cold_crack_day(self):
-        """Cold + Crack → gloat line appended."""
-        msg = format_message(_result(raw_score=90.0, band=Band.CRACK, mean_temp_c=10.0), 9, 18, 21)
-        assert "Nippy" in msg
+    def test_override_marginal_shows_best_window_tip(self):
+        """Override MARGINAL with best_window set → shows window tip."""
+        msg = format_message(
+            _result(override=True, band=Band.MARGINAL, first_rain_hour=17, best_window=(11, 15)),
+            9, 18, 21,
+        )
+        assert "11am" in msg
+        assert "3pm" in msg
 
-    def test_no_gloat_on_warm_crack_day(self):
-        msg = format_message(_result(raw_score=90.0, band=Band.CRACK, mean_temp_c=22.0), 9, 18, 21)
-        assert "Nippy" not in msg
+    def test_override_marginal_no_window_tip_when_best_window_none(self):
+        """Override MARGINAL with no best_window → no window tip."""
+        msg = format_message(
+            _result(override=True, band=Band.MARGINAL, first_rain_hour=17, best_window=None),
+            9, 18, 21,
+        )
+        assert "Best window" not in msg
 
     def test_html_bold_present(self):
         """Messages use HTML bold tags for Telegram."""
