@@ -73,6 +73,12 @@ def _near_rain_line(result: ScoreResult) -> str:
     return f"\n⚠️ Note: {int(result.near_rain_prob)}% chance of rain at {_fmt_hour(result.near_rain_hour)}"
 
 
+def _window_tip(best_window: tuple[int, int] | None) -> str:
+    if not best_window:
+        return ""
+    return f" Best window: {_fmt_hour(best_window[0])}–{_fmt_hour(best_window[1])}."
+
+
 def format_message(
     result: ScoreResult,
     hang_hour: int,
@@ -101,7 +107,7 @@ def format_message(
                 f"before bring-in time anyway."
                 f"{cond}{rain}{near_rain}{uv}"
             )
-        window_tip = f" Best window: {_fmt_hour(result.best_window[0])}–{_fmt_hour(result.best_window[1])}." if result.best_window else ""
+        window_tip = _window_tip(result.best_window)
         return (
             f"⚠️ <b>Peg's cautious — {score}/100.</b> Drying conditions hold till {rain_str}, "
             f"then rain before bring-in time. Fine if you're home to dash it in early "
@@ -134,7 +140,7 @@ def format_message(
         )
 
     if result.band == Band.MARGINAL:
-        window_tip = f" Best window: {start_str}–{dry_by_str}." if result.best_window else ""
+        window_tip = _window_tip(result.best_window)
         return (
             f"🧺 <b>Peg's on the fence — {score}/100.</b> "
             f"It'll <i>probably</i> dry if you're about to dash it in, "

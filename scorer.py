@@ -179,7 +179,6 @@ def round_display(raw: float) -> int:
 
 
 def _find_best_window(
-    hours: list[HourForecast],
     window_hours: list[int],
     potentials: dict[int, float],
 ) -> Optional[tuple[int, int]]:
@@ -284,7 +283,7 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
 
     # --- Best window ------------------------------------------------------
     scorable_window_hours = [h for h in window_hours if h in potentials]
-    best_window = _find_best_window(hours, scorable_window_hours, potentials)
+    best_window = _find_best_window(scorable_window_hours, potentials)
 
     # --- Display fields ---------------------------------------------------
     # first_rain_hour: first rain-gated hour in the late window (override message)

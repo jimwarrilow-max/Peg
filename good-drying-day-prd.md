@@ -104,7 +104,7 @@ VPD   = es(T) · (1 − RH/100)                        # the drying driver, kPa
 *Hand-test fixtures:* cool-dry **10°C/50% RH → VPD ≈ 0.61 kPa** out-dries warm-muggy **22°C/85% RH → VPD ≈ 0.40 kPa**. Fog (RH ≈ 100%) → VPD ≈ 0, rejected for free.
 
 ### Layer 1 — Gates (hard, not weighted)
-- **Rain:** an hour with `precipitation_probability > 50%` or `precipitation > 0.2 mm` scores **0**. If gated in the final ~2h of the window → trigger the **"Risky bring-in" override** (§8).
+- **Rain:** an hour with `precipitation_probability > 40%` or `precipitation > 0.2 mm` scores **0**. If gated in the final ~2h of the window → trigger the **"Risky bring-in" override** (§8).
 - **Window:** must hold enough usable daylight hours to reach the drying target.
 - **Missing/partial data:** an hour missing any required scoring field (temp, RH, wind, solar, precipitation, precipitation_probability) is **unscorable** and **excluded** — never treated as zero. If **>25% of window hours are unscorable**, or the scorable hours can't reach `DRY_TARGET` even at full potential, **skip the day** (fail quiet + ping).
 
@@ -113,7 +113,7 @@ VPD   = es(T) · (1 − RH/100)                        # the drying driver, kPa
 | Feature | Sub-score curve | Reaches 1.0 at |
 |---|---|---|
 | **VPD** | `clamp(VPD / 1.0, 0, 1)` | VPD ≥ 1.0 kPa |
-| **Wind** | `clamp(0.25 + mph/16, 0, 1)` | ~12 mph (0.25 floor in still air) |
+| **Wind** | `clamp(0.10 + 0.9·mph/12, 0, 1)` | ~12 mph (0.10 floor in still air) |
 | **Solar** | `clamp(rad / 450, 0, 1)` | ~450 W/m² |
 
 ```
@@ -126,7 +126,7 @@ Wind has a floor (washing dries in still air, slowly) and saturates around the 8
 cumulative = Σ hourly_potential        # over scorable hours in [hang → min(bring_in, dusk)]
 will_dry   = cumulative ≥ DRY_TARGET    # 4.0 towels, ~2.5 light
 ```
-`DRY_TARGET = 4.0` = "four perfect hours," for the **limiting fabric** (towels). **Best window** = earliest contiguous run of scorable hours reaching the target.
+`DRY_TARGET = 4.0` = "four perfect hours," for the **limiting fabric** (towels). **Best window** = the contiguous run of scorable hours reaching the target with the highest mean potential.
 **Coherence guarantee:** since `score = 50 × cumulative/DRY_TARGET` (§8), `will_dry` (towels) is true **exactly when `score ≥ 50`** — band and flag cannot contradict.
 
 ### Parameters — physics vs calibration knobs
@@ -135,11 +135,11 @@ will_dry   = cumulative ≥ DRY_TARGET    # 4.0 towels, ~2.5 light
 |---|---|---|
 | es coefficients | 0.6108, 17.27, 237.3 | **Physics — fixed** |
 | VPD_full | 1.0 kPa | Calibrate |
-| Wind floor / full | 0.25 / 12 mph | Calibrate |
+| Wind floor / full | 0.10 / 12 mph | Calibrate |
 | Gust flag | 32 mph | Safety |
 | Solar_full | 450 W/m² | Calibrate |
 | Weights (VPD/wind/solar) | 0.50 / 0.30 / 0.20 | **Prime calibration targets** |
-| Rain gate | 50% prob or 0.2 mm/h | Calibrate |
+| Rain gate | 40% prob or 0.2 mm/h | Calibrate |
 | Late-rain window | final 2h | Calibrate |
 | Unscorable-hours limit | 25% of window | Calibrate |
 | DRY_TARGET | 4.0 towels / 2.5 light | Calibrate |

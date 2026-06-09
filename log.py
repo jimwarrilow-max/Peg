@@ -21,7 +21,7 @@ import os
 from datetime import date as Date
 from typing import Optional
 
-from scorer import HourForecast, ScoreResult, WindowConfig
+from scorer import Band, HourForecast, ScoreResult, WindowConfig
 
 LOG_PATH = "log.csv"
 
@@ -138,14 +138,23 @@ def write_outcome(
     return found
 
 
+def prediction_correct(band: str, outcome: str) -> bool:
+    """
+    The canonical "was Peg right" rule, shared by recent_accuracy and summary.py.
+
+    Correct when Peg predicted drying (GOOD/CRACK) and the outcome was dry,
+    or predicted no drying (TUMBLE/MARGINAL) and the outcome was damp.
+    """
+    predicted_dry = band in (Band.GOOD.value, Band.CRACK.value)
+    return (predicted_dry and outcome == "dry") or (not predicted_dry and outcome == "damp")
+
+
 def recent_accuracy(n: int = 10, log_path: str = LOG_PATH) -> Optional[tuple[int, int]]:
     """
-    Return (correct, total) for the last n days with a non-skip outcome recorded.
-    'correct' means outcome==dry when band is not TUMBLE/MARGINAL, or outcome==damp otherwise.
-    Actually: correct = the band prediction matched reality (dry=good prediction, damp=bad).
-    More precisely: correct when outcome=='dry' (Peg's positive forecast proved right)
-    or outcome=='damp' is counted as total but not correct.
-    Returns None if fewer than 3 results exist.
+    Return (correct, total) over the last n log entries with a dry/damp outcome
+    recorded (skip outcomes excluded; n counts entries, not calendar days).
+    Correctness follows prediction_correct(). Returns None if fewer than 3
+    such entries exist.
     """
     if not os.path.isfile(log_path):
         return None
@@ -159,15 +168,7 @@ def recent_accuracy(n: int = 10, log_path: str = LOG_PATH) -> Optional[tuple[int
     rows = rows[-n:]
     if len(rows) < 3:
         return None
-    # Peg was right when it said GOOD/CRACK and it dried, or said TUMBLE/MARGINAL and it didn't
-    from scorer import Band
-    correct = 0
-    for row in rows:
-        outcome = row["outcome"]
-        band = row.get("band", "")
-        predicted_dry = band in (Band.GOOD.value, Band.CRACK.value)
-        if (predicted_dry and outcome == "dry") or (not predicted_dry and outcome == "damp"):
-            correct += 1
+    correct = sum(1 for row in rows if prediction_correct(row.get("band", ""), row["outcome"]))
     return correct, len(rows)
 
 
