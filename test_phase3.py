@@ -32,6 +32,8 @@ def _result(
     first_rain_hour: int | None = None,
     window_rain_hour: int | None = None,
     window_rain_prob: float | None = None,
+    near_rain_hour: int | None = None,
+    near_rain_prob: float | None = None,
     mean_temp_c: float | None = 18.0,
     mean_wind_mph: float | None = 8.0,
     mean_rh_pct: float | None = 60.0,
@@ -50,6 +52,8 @@ def _result(
         first_rain_hour=first_rain_hour,
         window_rain_hour=window_rain_hour,
         window_rain_prob=window_rain_prob,
+        near_rain_hour=near_rain_hour,
+        near_rain_prob=near_rain_prob,
         mean_temp_c=mean_temp_c,
         mean_wind_mph=mean_wind_mph,
         mean_rh_pct=mean_rh_pct,
@@ -232,6 +236,21 @@ class TestFormatMessage:
             9, 18, 21,
         )
         assert "Best window" not in msg
+
+    def test_near_rain_line_shown_when_set(self):
+        """Near-rain warning appears when near_rain_hour/prob are set."""
+        msg = format_message(
+            _result(raw_score=75.0, band=Band.GOOD, near_rain_hour=14, near_rain_prob=35.0),
+            9, 18, 21,
+        )
+        assert "⚠️ Note:" in msg
+        assert "35%" in msg
+        assert "2pm" in msg
+
+    def test_near_rain_line_absent_when_none(self):
+        """No near-rain warning when near_rain_hour is None."""
+        msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21)
+        assert "⚠️ Note:" not in msg
 
     def test_html_bold_present(self):
         """Messages use HTML bold tags for Telegram."""

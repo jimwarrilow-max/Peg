@@ -67,6 +67,12 @@ def _uv_line(result: ScoreResult) -> str:
     return f"\n☀️ UV index: {result.peak_uv:.0f} ({_uv_label(result.peak_uv)})"
 
 
+def _near_rain_line(result: ScoreResult) -> str:
+    if result.near_rain_hour is None or result.near_rain_prob is None:
+        return ""
+    return f"\n⚠️ Note: {int(result.near_rain_prob)}% chance of rain at {_fmt_hour(result.near_rain_hour)}"
+
+
 def format_message(
     result: ScoreResult,
     hang_hour: int,
@@ -78,9 +84,10 @@ def format_message(
         return SKIPPED_MSG
 
     score = result.display_score
-    cond  = _conditions_line(result)
-    rain       = _rain_line(result, hang_hour)
-    uv         = _uv_line(result)
+    cond      = _conditions_line(result)
+    rain      = _rain_line(result, hang_hour)
+    uv        = _uv_line(result)
+    near_rain = _near_rain_line(result)
 
     if result.override:
         # Use the first rain in the full window for the headline timing.
@@ -92,14 +99,14 @@ def format_message(
                 f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
                 f"Air'll be too damp to dry anything — and rain arrives at {rain_str} "
                 f"before bring-in time anyway."
-                f"{cond}{rain}{uv}"
+                f"{cond}{rain}{near_rain}{uv}"
             )
         window_tip = f" Best window: {_fmt_hour(result.best_window[0])}–{_fmt_hour(result.best_window[1])}." if result.best_window else ""
         return (
             f"⚠️ <b>Peg's cautious — {score}/100.</b> Drying conditions hold till {rain_str}, "
             f"then rain before bring-in time. Fine if you're home to dash it in early "
             f"— risky if you're out all day.{window_tip}"
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{near_rain}{uv}"
         )
 
     # Recommended hang and bring-in times from the best scoring window
@@ -115,7 +122,7 @@ def format_message(
         return (
             f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
             f"{hang_advice} — it'll be crisp by {dry_by_str}."
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{near_rain}{uv}"
         )
 
     if result.band == Band.GOOD:
@@ -123,7 +130,7 @@ def format_message(
             f"🧺 <b>Peg's verdict: {score}/100. A solid one.</b> "
             f"{hang_advice}, in by {dry_by_str}. "
             f"Won't break records, but it'll get the job done."
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{near_rain}{uv}"
         )
 
     if result.band == Band.MARGINAL:
@@ -133,7 +140,7 @@ def format_message(
             f"It'll <i>probably</i> dry if you're about to dash it in, "
             f"but the heavy stuff might sulk. I'd risk a light load, not the towels."
             f"{window_tip}"
-            f"{cond}{rain}{uv}"
+            f"{cond}{rain}{near_rain}{uv}"
         )
 
     # Band.TUMBLE
@@ -141,5 +148,5 @@ def format_message(
         f"🧺 <b>Peg says don't bother tomorrow. {score}/100.</b> "
         f"Air'll be too damp to take anything off your hands. "
         f"Tumble dryer, or hold on."
-        f"{cond}{rain}{uv}"
+        f"{cond}{rain}{near_rain}{uv}"
     )
