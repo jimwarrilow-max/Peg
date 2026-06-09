@@ -138,6 +138,39 @@ def write_outcome(
     return found
 
 
+def recent_accuracy(n: int = 10, log_path: str = LOG_PATH) -> Optional[tuple[int, int]]:
+    """
+    Return (correct, total) for the last n days with a non-skip outcome recorded.
+    'correct' means outcome==dry when band is not TUMBLE/MARGINAL, or outcome==damp otherwise.
+    Actually: correct = the band prediction matched reality (dry=good prediction, damp=bad).
+    More precisely: correct when outcome=='dry' (Peg's positive forecast proved right)
+    or outcome=='damp' is counted as total but not correct.
+    Returns None if fewer than 3 results exist.
+    """
+    if not os.path.isfile(log_path):
+        return None
+    rows = []
+    with open(log_path, newline="", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            outcome = row.get("outcome", "")
+            if outcome in ("dry", "damp"):
+                rows.append(row)
+    rows = rows[-n:]
+    if len(rows) < 3:
+        return None
+    # Peg was right when it said GOOD/CRACK and it dried, or said TUMBLE/MARGINAL and it didn't
+    from scorer import Band
+    correct = 0
+    for row in rows:
+        outcome = row["outcome"]
+        band = row.get("band", "")
+        predicted_dry = band in (Band.GOOD.value, Band.CRACK.value)
+        if (predicted_dry and outcome == "dry") or (not predicted_dry and outcome == "damp"):
+            correct += 1
+    return correct, len(rows)
+
+
 def _row_exists(log_path: str, date_str: str) -> bool:
     if not os.path.isfile(log_path):
         return False

@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from log import write_outcome, append_prediction, read_band
+from log import write_outcome, append_prediction, read_band, recent_accuracy
 from scorer import Band, HourForecast, ScoreResult, WindowConfig, round_display
 
 
@@ -323,3 +323,89 @@ class TestNotifyExtensions:
 
         assert len(result) == 1
         assert result[0]["update_id"] == 1
+
+
+# ---------------------------------------------------------------------------
+# log.recent_accuracy
+# ---------------------------------------------------------------------------
+
+class TestRecentAccuracy:
+
+    def _log_with_outcomes(self, tmp_path, entries: list[tuple[str, str, str]]) -> str:
+        """entries: list of (date_str, band_value, outcome)"""
+        log_path = str(tmp_path / "log.csv")
+        for date_str, band_value, outcome in entries:
+            result = ScoreResult(
+                raw_score=75.0, display_score=75,
+                band=Band(band_value),
+                will_dry=True, override=False, best_window=(9, 14),
+                gust_flag=False, skipped=False,
+            )
+            cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
+            hours = [
+                HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
+                             wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
+                             precip_prob_pct=5.0)
+                for i in range(24)
+            ]
+            append_prediction(date.fromisoformat(date_str), result, cfg, hours, log_path=log_path)
+            if outcome:
+                write_outcome(date_str, outcome, log_path=log_path)
+        return log_path
+
+    def test_returns_none_when_no_file(self, tmp_path):
+        assert recent_accuracy(log_path=str(tmp_path / "nope.csv")) is None
+
+    def test_returns_none_when_fewer_than_3_results(self, tmp_path):
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-30", Band.GOOD.value, "dry"),
+            ("2026-05-31", Band.GOOD.value, "dry"),
+        ])
+        assert recent_accuracy(log_path=log_path) is None
+
+    def test_correct_when_good_and_dried(self, tmp_path):
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-28", Band.GOOD.value,  "dry"),
+            ("2026-05-29", Band.CRACK.value, "dry"),
+            ("2026-05-30", Band.GOOD.value,  "dry"),
+        ])
+        correct, total = recent_accuracy(log_path=log_path)
+        assert total == 3
+        assert correct == 3
+
+    def test_correct_when_marginal_and_damp(self, tmp_path):
+        """Marginal predicts it might not dry — outcome damp counts as correct."""
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-28", Band.MARGINAL.value, "damp"),
+            ("2026-05-29", Band.MARGINAL.value, "damp"),
+            ("2026-05-30", Band.GOOD.value,     "dry"),
+        ])
+        correct, total = recent_accuracy(log_path=log_path)
+        assert total == 3
+        assert correct == 3
+
+    def test_skip_outcomes_not_counted(self, tmp_path):
+        """Rows with outcome=='skip' are excluded from the accuracy calculation."""
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-28", Band.GOOD.value, "dry"),
+            ("2026-05-29", Band.GOOD.value, "skip"),   # excluded
+            ("2026-05-30", Band.GOOD.value, "dry"),
+            ("2026-05-31", Band.GOOD.value, "dry"),
+        ])
+        correct, total = recent_accuracy(log_path=log_path)
+        assert total == 3  # skip not counted
+        assert correct == 3
+
+    def test_limits_to_last_n_results(self, tmp_path):
+        """Only the last n=3 entries are considered."""
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-25", Band.GOOD.value, "damp"),  # old wrong
+            ("2026-05-26", Band.GOOD.value, "damp"),  # old wrong
+            ("2026-05-27", Band.GOOD.value, "damp"),  # old wrong
+            ("2026-05-28", Band.GOOD.value, "dry"),   # recent correct
+            ("2026-05-29", Band.GOOD.value, "dry"),   # recent correct
+            ("2026-05-30", Band.GOOD.value, "dry"),   # recent correct
+        ])
+        correct, total = recent_accuracy(n=3, log_path=log_path)
+        assert total == 3
+        assert correct == 3

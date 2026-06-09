@@ -74,22 +74,22 @@ def _fake_urlopen(response_dict: dict):
 class TestTransformHappyPath:
 
     def test_returns_24_hours(self):
-        hours, _ = transform(_make_response())
+        hours, _, _ = transform(_make_response())
         assert len(hours) == 24
 
     def test_hour_field_matches_index(self):
-        hours, _ = transform(_make_response())
+        hours, _, _ = transform(_make_response())
         for i, h in enumerate(hours):
             assert h.hour == i
 
     def test_temperature_aligned(self):
-        hours, _ = transform(_make_response())
+        hours, _, _ = transform(_make_response())
         for i, h in enumerate(hours):
             assert h.temp_c == pytest.approx(15.0 + i * 0.1)
 
     def test_all_constant_fields_aligned(self):
         """wind, solar, precip, precip_prob and gust are aligned to the API arrays."""
-        hours, _ = transform(_make_response())
+        hours, _, _ = transform(_make_response())
         assert all(h.wind_mph        == pytest.approx(8.0)   for h in hours)
         assert all(h.solar_wm2       == pytest.approx(300.0) for h in hours)
         assert all(h.precip_mm       == pytest.approx(0.0)   for h in hours)
@@ -97,26 +97,26 @@ class TestTransformHappyPath:
         assert all(h.wind_gust_mph   == pytest.approx(12.0)  for h in hours)
 
     def test_dusk_hour_extracted(self):
-        _, dusk_hour = transform(_make_response())   # sunset at T21:18
+        _, dusk_hour, _ = transform(_make_response())   # sunset at T21:18
         assert dusk_hour == 21
 
     def test_dusk_hour_floor(self):
         """Sunset at :45 should give floor hour, not ceiling."""
         data = _make_response()
         data["daily"]["sunset"][0] = "2026-05-30T20:45"
-        _, dusk_hour = transform(data)
+        _, dusk_hour, _ = transform(data)
         assert dusk_hour == 20
 
     def test_dusk_hour_midnight_edge(self):
         data = _make_response()
         data["daily"]["sunset"][0] = "2026-05-30T00:01"
-        _, dusk_hour = transform(data)
+        _, dusk_hour, _ = transform(data)
         assert dusk_hour == 0
 
     def test_day_index_1_extracts_second_day(self):
         """day_index=1 returns hours 0–23 of the second day — the production forecast path."""
         data = _make_two_day_response()
-        hours, dusk_hour = transform(data, day_index=1)
+        hours, dusk_hour, _ = transform(data, day_index=1)
         assert len(hours) == 24
         assert [h.hour for h in hours] == list(range(24))
         assert dusk_hour == 21   # second day's sunset at T21:20
@@ -125,14 +125,51 @@ class TestTransformHappyPath:
         """Hour 0 of day 1 should reflect index 24 of the API array, not index 0."""
         data = _make_two_day_response()
         data["hourly"]["temperature_2m"][24] = 99.0   # sentinel in day-1 hour-0
-        hours, _ = transform(data, day_index=1)
+        hours, _, _ = transform(data, day_index=1)
         assert hours[0].temp_c == pytest.approx(99.0)
 
     def test_uv_index_mapped_from_api(self):
         """uv_index field is extracted and stored on HourForecast."""
-        hours, _ = transform(_make_response())
+        hours, _, _ = transform(_make_response())
         for i, h in enumerate(hours):
             assert h.uv_index == pytest.approx(float(i % 12))
+
+    def test_sunrise_hour_extracted(self):
+        """Sunrise at T05:10 → sunrise_hour == 5."""
+        _, _, sunrise_hour = transform(_make_response())  # sunrise at T05:10
+        assert sunrise_hour == 5
+
+    def test_sunrise_hour_floor(self):
+        """Sunrise at :45 should give floor hour."""
+        data = _make_response()
+        data["daily"]["sunrise"][0] = "2026-05-30T06:45"
+        _, _, sunrise_hour = transform(data)
+        assert sunrise_hour == 6
+
+    def test_sunrise_hour_day_index_1(self):
+        """day_index=1 returns sunrise from the second daily entry."""
+        data = _make_two_day_response()  # day-1 sunrise at T05:08
+        _, _, sunrise_hour = transform(data, day_index=1)
+        assert sunrise_hour == 5
+
+    def test_sunrise_missing_gives_zero(self):
+        """Absent sunrise → sunrise_hour defaults to 0 (no pre-dawn restriction)."""
+        data = _make_response()
+        del data["daily"]["sunrise"]
+        _, _, sunrise_hour = transform(data)
+        assert sunrise_hour == 0
+
+    def test_et0_mapped_from_api(self):
+        """et0_fao_evapotranspiration is extracted and stored on HourForecast."""
+        hours, _, _ = transform(_make_response())
+        assert all(h.et0_mm == pytest.approx(0.15) for h in hours)
+
+    def test_et0_null_gives_none(self):
+        """Null et0 value → et0_mm is None."""
+        data = _make_response()
+        data["hourly"]["et0_fao_evapotranspiration"][3] = None
+        hours, _, _ = transform(data)
+        assert hours[3].et0_mm is None
 
 
 # ---------------------------------------------------------------------------
@@ -143,7 +180,7 @@ class TestVpdComputed:
 
     def test_vpd_computed_not_from_api_field(self):
         """VPD must be derived from temp+RH regardless of API content."""
-        hours, _ = transform(_make_response())
+        hours, _, _ = transform(_make_response())
         for h in hours:
             assert h.vpd_kpa == pytest.approx(compute_vpd(h.temp_c, h.rh_pct), rel=1e-6)
 
@@ -152,19 +189,19 @@ class TestVpdComputed:
         data = _make_response()
         for i in range(24):
             data["hourly"]["relative_humidity_2m"][i] = 100.0
-        hours, _ = transform(data)
+        hours, _, _ = transform(data)
         assert all(h.vpd_kpa == pytest.approx(0.0, abs=0.01) for h in hours)
 
     def test_vpd_none_when_temp_missing(self):
         data = _make_response()
         data["hourly"]["temperature_2m"][5] = None
-        hours, _ = transform(data)
+        hours, _, _ = transform(data)
         assert hours[5].vpd_kpa is None
 
     def test_vpd_none_when_rh_missing(self):
         data = _make_response()
         data["hourly"]["relative_humidity_2m"][3] = None
-        hours, _ = transform(data)
+        hours, _, _ = transform(data)
         assert hours[3].vpd_kpa is None
 
     def test_vpd_cold_dry_beats_warm_humid(self):
@@ -174,7 +211,7 @@ class TestVpdComputed:
         data["hourly"]["relative_humidity_2m"][0] = 50.0
         data["hourly"]["temperature_2m"][1]       = 22.0
         data["hourly"]["relative_humidity_2m"][1] = 85.0
-        hours, _ = transform(data)
+        hours, _, _ = transform(data)
         assert hours[0].vpd_kpa > hours[1].vpd_kpa
 
 
@@ -195,14 +232,14 @@ class TestNullFieldHandling:
     def test_null_value_gives_none(self, api_field, attr, idx):
         data = _make_response()
         data["hourly"][api_field][idx] = None
-        hours, _ = transform(data)
+        hours, _, _ = transform(data)
         assert getattr(hours[idx], attr) is None
 
     def test_missing_field_entirely_gives_none(self):
         """If a whole field key is absent from the response, every hour gets None."""
         data = _make_response()
         del data["hourly"]["wind_speed_10m"]
-        hours, _ = transform(data)
+        hours, _, _ = transform(data)
         assert all(h.wind_mph is None for h in hours)
 
 

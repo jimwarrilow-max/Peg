@@ -1,13 +1,13 @@
 """
 Fetch-and-transform layer for Peg.
 
-fetch_forecast(lat, lon) → (hours, dusk_hour)
+fetch_forecast(lat, lon) → (hours, dusk_hour, sunrise_hour)
 
 The two steps are deliberately separated so the transform can be tested
 without hitting the network:
 
-  _fetch_raw(lat, lon) → dict          — I/O only; raises FetchError
-  transform(data)      → (hours, int)  — pure; testable with a fixture dict
+  _fetch_raw(lat, lon) → dict                       — I/O only; raises FetchError
+  transform(data)      → (hours, dusk_hour, sunrise_hour)  — pure; testable with a fixture dict
 
 VPD is computed here from temp+RH (PRD §7: the API's VPD field proved
 unreliable in live testing — returned 0 despite real humidity).
@@ -46,31 +46,38 @@ class FetchError(Exception):
 # Public API
 # ---------------------------------------------------------------------------
 
-def fetch_forecast(lat: float, lon: float, timezone: str = "Europe/London") -> tuple[list[HourForecast], int]:
-    """Return (hours, dusk_hour) for tomorrow at the given location."""
+def fetch_forecast(lat: float, lon: float, timezone: str = "Europe/London") -> tuple[list[HourForecast], int, int]:
+    """Return (hours, dusk_hour, sunrise_hour) for tomorrow at the given location."""
     data = _fetch_raw(lat, lon, timezone)
     return transform(data, day_index=1)
 
 
-def transform(data: dict, day_index: int = 0) -> tuple[list[HourForecast], int]:
+def transform(data: dict, day_index: int = 0) -> tuple[list[HourForecast], int, int]:
     """
-    Convert a raw Open-Meteo response dict into (hours, dusk_hour).
+    Convert a raw Open-Meteo response dict into (hours, dusk_hour, sunrise_hour).
 
-    day_index — 0 = first day in the response, 1 = second day (tomorrow when
-                forecast_days=2).
+    day_index    — 0 = first day in the response, 1 = second day (tomorrow when
+                   forecast_days=2).
 
-    hours     — one HourForecast per hour of the target day (hour field 0–23);
-                vpd_kpa is computed from temp+RH, or None if either is missing.
-    dusk_hour — floor of the sunset hour (for WindowConfig.dusk_hour).
+    hours        — one HourForecast per hour of the target day (hour field 0–23);
+                   vpd_kpa is computed from temp+RH, or None if either is missing.
+    dusk_hour    — floor of the sunset hour (for WindowConfig.dusk_hour).
+    sunrise_hour — floor of the sunrise hour (to gate pre-dawn hours).
 
     Raises FetchError if required structure is absent.
     """
-    # --- Dusk hour ----------------------------------------------------------
+    # --- Dusk and dawn hours -----------------------------------------------
     try:
-        sunset_str: str = data["daily"]["sunset"][day_index]
+        sunset_str: str  = data["daily"]["sunset"][day_index]
         dusk_hour = int(sunset_str[11:13])
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         raise FetchError(f"Could not parse sunset from response: {exc}") from exc
+
+    try:
+        sunrise_str: str = data["daily"]["sunrise"][day_index]
+        sunrise_hour = int(sunrise_str[11:13])
+    except (KeyError, IndexError, TypeError, ValueError):
+        sunrise_hour = 0  # absent or malformed → no restriction
 
     # --- Hourly arrays ------------------------------------------------------
     hourly = data.get("hourly", {})
@@ -105,9 +112,10 @@ def transform(data: dict, day_index: int = 0) -> tuple[list[HourForecast], int]:
             precip_prob_pct=_at(hourly, "precipitation_probability", i),
             wind_gust_mph=_at(hourly, "wind_gusts_10m", i),
             uv_index=_at(hourly, "uv_index", i),
+            et0_mm=_at(hourly, "et0_fao_evapotranspiration", i),
         ))
 
-    return hours, dusk_hour
+    return hours, dusk_hour, sunrise_hour
 
 
 # ---------------------------------------------------------------------------

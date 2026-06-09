@@ -29,20 +29,22 @@ def main() -> None:
 
     # --- Fetch -----------------------------------------------------------
     try:
-        hours, dusk_hour = fetch_forecast(config.LAT, config.LON, config.TIMEZONE)
+        hours, dusk_hour, sunrise_hour = fetch_forecast(config.LAT, config.LON, config.TIMEZONE)
     except FetchError as exc:
         _fail(f"Fetch failed: {exc}")
 
     # --- Score -----------------------------------------------------------
+    # Hang hour capped by sunrise so pre-dawn hours are never recommended
+    effective_hang = max(config.HANG_HOUR, sunrise_hour + 1)
     cfg = WindowConfig(
-        hang_hour=config.HANG_HOUR,
+        hang_hour=effective_hang,
         bring_in_hour=config.BRING_IN_HOUR,
         dusk_hour=dusk_hour,
     )
     result = score(hours, cfg)
 
     # --- Format ----------------------------------------------------------
-    message = format_message(result, config.HANG_HOUR, config.BRING_IN_HOUR, dusk_hour)
+    message = format_message(result, effective_hang, config.BRING_IN_HOUR, dusk_hour)
     print(message)
 
     # --- Notify ----------------------------------------------------------

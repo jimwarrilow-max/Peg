@@ -13,7 +13,7 @@ import sys
 from datetime import date
 
 import config
-from log import read_band
+from log import read_band, recent_accuracy
 from notify import broadcast, send_with_keyboard
 from scorer import Band
 
@@ -40,9 +40,11 @@ def main() -> None:
         {"text": "⏭️ Didn't hang",  "callback_data": f"skip:{today}"},
     ]]
 
+    acc = recent_accuracy()
+    acc_line = f"\n(Peg's been right {acc[0]} of the last {acc[1]} times 🎯)" if acc else ""
     prompt = (
-        "<b>Evening! How'd I do — did it dry?</b>\n"
-        "Honest answers make me sharper."
+        f"<b>Evening! How'd I do — did it dry?</b>\n"
+        f"Honest answers make me sharper.{acc_line}"
     )
 
     def _send_one(chat_id: str) -> None:
