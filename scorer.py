@@ -30,7 +30,7 @@ _ES_C = 237.3
 
 # Calibration knobs
 VPD_FULL = 1.0          # kPa — VPD at which sub-score reaches 1.0
-WIND_FLOOR = 0.25       # still-air floor
+WIND_FLOOR = 0.10       # still-air floor
 WIND_FULL_MPH = 12.0    # mph at which wind sub-score reaches 1.0
 SOLAR_FULL = 450.0      # W/m² at which solar sub-score reaches 1.0
 
@@ -38,7 +38,8 @@ WEIGHT_VPD = 0.50
 WEIGHT_WIND = 0.30
 WEIGHT_SOLAR = 0.20
 
-RAIN_PROB_GATE = 50     # > this → gated  (i.e. >50%, not >=50%)
+RAIN_PROB_GATE = 40     # > this → gated
+NEAR_RAIN_PROB_LOW = 25  # soft warning range: NEAR_RAIN_PROB_LOW ≤ prob ≤ RAIN_PROB_GATE
 RAIN_MM_GATE = 0.2      # > this → gated
 
 LATE_RAIN_HOURS = 2     # final N hours of window trigger "risky bring-in"
@@ -71,6 +72,7 @@ class HourForecast:
     precip_prob_pct: Optional[float]   # 0–100
     wind_gust_mph: Optional[float] = None   # for gust flag only; not scored
     uv_index: Optional[float] = None        # display only; not used in scoring
+    et0_mm: Optional[float] = None          # evapotranspiration (logged; not yet scored)
 
 
 @dataclass
@@ -98,6 +100,8 @@ class ScoreResult:
     first_rain_hour: Optional[int] = None        # first rain-gated hour in late window (override)
     window_rain_hour: Optional[int] = None       # first rain-gated hour in full window (rain line)
     window_rain_prob: Optional[float] = None     # precip probability at window_rain_hour
+    near_rain_hour: Optional[int] = None         # first hour with prob in soft-warning range
+    near_rain_prob: Optional[float] = None       # prob at near_rain_hour
     mean_temp_c: Optional[float] = None          # mean window temperature for display
     mean_wind_mph: Optional[float] = None        # mean window wind speed for display
     mean_rh_pct: Optional[float] = None          # mean window relative humidity for display
@@ -180,17 +184,25 @@ def _find_best_window(
     potentials: dict[int, float],
 ) -> Optional[tuple[int, int]]:
     """
-    Earliest contiguous run of scorable hours whose cumulative potential
-    reaches DRY_TARGET.  Returns (start_hour, end_hour) inclusive, or None.
+    Contiguous run of hours whose cumulative potential reaches DRY_TARGET
+    with the highest mean potential.  Returns (start_hour, end_hour) inclusive,
+    or None if no run reaches DRY_TARGET.
     """
+    best: Optional[tuple[int, int]] = None
+    best_mean = -1.0
     for start_idx in range(len(window_hours)):
         cumulative = 0.0
         for end_idx in range(start_idx, len(window_hours)):
             h = window_hours[end_idx]
             cumulative += potentials.get(h, 0.0)
             if cumulative >= DRY_TARGET:
-                return (window_hours[start_idx], window_hours[end_idx])
-    return None
+                n_hours = end_idx - start_idx + 1
+                mean_pot = cumulative / n_hours
+                if mean_pot > best_mean:
+                    best_mean = mean_pot
+                    best = (window_hours[start_idx], window_hours[end_idx])
+                break  # no need to extend this window further
+    return best
 
 
 # ---------------------------------------------------------------------------
@@ -290,6 +302,18 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
             window_rain_prob = h.precip_prob_pct
             break
 
+    # near_rain: first hour in window with prob in soft-warning range (not yet gated)
+    near_rain_hour: Optional[int] = None
+    near_rain_prob: Optional[float] = None
+    for hnum in range(config.hang_hour, end_hour + 1):
+        h = by_hour.get(hnum)
+        if h and not is_rain_gated(h):
+            prob = h.precip_prob_pct
+            if prob is not None and prob >= NEAR_RAIN_PROB_LOW:
+                near_rain_hour = hnum
+                near_rain_prob = prob
+                break
+
     # Mean conditions and peak UV over the full window (for display only)
     def _fmean(vals: list) -> Optional[float]:
         clean = [v for v in vals if v is not None]
@@ -313,6 +337,8 @@ def score(hours: list[HourForecast], config: WindowConfig) -> ScoreResult:
         first_rain_hour=first_rain_hour,
         window_rain_hour=window_rain_hour,
         window_rain_prob=window_rain_prob,
+        near_rain_hour=near_rain_hour,
+        near_rain_prob=near_rain_prob,
         mean_temp_c=mean_temp_c,
         mean_wind_mph=mean_wind_mph,
         mean_rh_pct=mean_rh_pct,

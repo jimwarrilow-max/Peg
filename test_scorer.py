@@ -113,13 +113,13 @@ def _make_day_for_score(
 class TestBaselineFixtures:
 
     def test_SCORE02_still_air_wind_floor(self):
-        """wind = 0 mph → wind sub-score = 0.25 (not 0)"""
+        """wind = 0 mph → wind sub-score = 0.10 (not 0)"""
         # All VPD and solar = 0; only wind floor contributes
-        # hourly = 0.5×0 + 0.3×0.25 + 0.2×0 = 0.075 per hour
-        # cumulative = 8 × 0.075 = 0.6  →  score = 50 × 0.6/4.0 = 7.5
+        # hourly = 0.5×0 + 0.3×0.10 + 0.2×0 = 0.03 per hour
+        # cumulative = 8 × 0.03 = 0.24  →  score = 50 × 0.24/4.0 = 3.0
         hours = _day_of(n_hours=8, vpd=0.0, wind=0.0, solar=0.0)
         result = score(hours, _window())
-        assert result.raw_score == pytest.approx(7.5)
+        assert result.raw_score == pytest.approx(3.0)
         assert not result.skipped
 
     def test_SCORE03_wind_saturation(self):
@@ -135,13 +135,13 @@ class TestBaselineFixtures:
         assert r15.raw_score == pytest.approx(r10.raw_score)
 
     def test_SCORE05_weighted_mix(self):
-        """vpd=0.6 / wind=8mph / solar=225 → hourly_potential = 0.625"""
-        # vpd_s=0.6, wind_s=0.25+8/16=0.75, solar_s=225/450=0.5
-        # hourly = 0.5×0.6 + 0.3×0.75 + 0.2×0.5 = 0.625; cumulative = 5.0
-        # score = clamp(50 × 5.0/4.0, 0, 100) = 62.5
+        """vpd=0.6 / wind=8mph / solar=225 → hourly_potential = 0.61"""
+        # vpd_s=0.6, wind_s=0.10+8/(12/0.9)=0.10+0.6=0.70, solar_s=225/450=0.5
+        # hourly = 0.5×0.6 + 0.3×0.70 + 0.2×0.5 = 0.61; cumulative = 4.88
+        # score = clamp(50 × 4.88/4.0, 0, 100) = 61.0
         hours = _day_of(n_hours=8, vpd=0.6, wind=8.0, solar=225.0)
         result = score(hours, _window(hang=8, bring_in=15, dusk=20))
-        assert result.raw_score == pytest.approx(62.5)
+        assert result.raw_score == pytest.approx(61.0)
 
     def test_SCORE06_perfect_day_hits_towel_bar(self):
         """4 perfect hours → cumulative 4.0 → score 50, will_dry True, band Marginal"""
@@ -168,14 +168,14 @@ class TestBaselineFixtures:
         assert r4.will_dry is False
 
     def test_SCORE10_rain_gate_boundaries(self):
-        """precip_prob >50 gates; =50 does not. precip_mm >0.2 gates; =0.2 does not."""
+        """precip_prob >40 gates; =40 does not. precip_mm >0.2 gates; =0.2 does not."""
         cfg = _window(hang=8, bring_in=8, dusk=20)
-        h_50  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=50.0, precip_mm=0.0)
-        h_51  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=51.0, precip_mm=0.0)
+        h_40  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=40.0, precip_mm=0.0)
+        h_41  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=41.0, precip_mm=0.0)
         h_02  = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=0.0,  precip_mm=0.2)
         h_021 = _hour(h=8, vpd=1.0, wind=12.0, solar=450.0, precip_prob=0.0,  precip_mm=0.21)
-        assert score([h_50],  cfg).raw_score  > 0,             "50% prob should not be gated"
-        assert score([h_51],  cfg).raw_score  == pytest.approx(0.0), "51% prob should be gated"
+        assert score([h_40],  cfg).raw_score  > 0,             "40% prob should not be gated"
+        assert score([h_41],  cfg).raw_score  == pytest.approx(0.0), "41% prob should be gated"
         assert score([h_02],  cfg).raw_score  > 0,             "0.2mm should not be gated"
         assert score([h_021], cfg).raw_score  == pytest.approx(0.0), "0.21mm should be gated"
 
@@ -451,3 +451,66 @@ class TestInvariants:
     def test_vpd_hand_tests(self, temp_c, rh_pct, expected_vpd):
         """compute_vpd matches the PRD §7 hand-test values."""
         assert compute_vpd(temp_c, rh_pct) == pytest.approx(expected_vpd, abs=0.005)
+
+
+# ---------------------------------------------------------------------------
+# Best-window quality (#20) and near-rain warning (#23)
+# ---------------------------------------------------------------------------
+
+class TestBestWindowQuality:
+
+    def test_prefers_higher_quality_window_over_earlier(self):
+        """
+        If afternoon hours are much better than morning, best_window should point
+        to the afternoon even though morning reached DRY_TARGET first.
+        Poor morning: vpd=0.01, wind=0.5, solar=10  → ~0.027 pot/hr (needs many hours)
+        Good afternoon: vpd=1.0, wind=12, solar=450 → 1.0 pot/hr (4 hours = DRY_TARGET)
+        """
+        # Build a window of 12 hours: 8-10 poor, 11-14 excellent
+        poor_hours = [_hour(h=h, vpd=0.01, wind=0.5, solar=10.0) for h in range(8, 11)]
+        good_hours = [_hour(h=h, vpd=1.0,  wind=12.0, solar=450.0) for h in range(11, 16)]
+        hours = poor_hours + good_hours
+        cfg = _window(hang=8, bring_in=15, dusk=20)
+        result = score(hours, cfg)
+        assert result.best_window is not None
+        # Window must include the good afternoon hours (start >= 11)
+        assert result.best_window[0] >= 11
+
+    def test_window_within_bounds_after_quality_selection(self):
+        """Best window start/end stay within [hang_hour, end_hour]."""
+        hours = _day_of(n_hours=8)
+        result = score(hours, _window())
+        if result.best_window is not None:
+            cfg = _window()
+            end_bound = min(cfg.bring_in_hour, cfg.dusk_hour)
+            assert result.best_window[0] >= cfg.hang_hour
+            assert result.best_window[1] <= end_bound
+
+
+class TestNearRainWarning:
+
+    def test_near_rain_set_when_prob_in_range(self):
+        """Hour with prob 30% (above NEAR_RAIN_PROB_LOW=25, ≤ RAIN_PROB_GATE=40) → near_rain set."""
+        hours = [_hour(h=h, precip_prob=0.0) for h in range(8, 12)]
+        hours.append(_hour(h=12, precip_prob=30.0))
+        hours += [_hour(h=h, precip_prob=0.0) for h in range(13, 16)]
+        result = score(hours, _window(hang=8, bring_in=15, dusk=20))
+        assert result.near_rain_hour == 12
+        assert result.near_rain_prob == pytest.approx(30.0)
+
+    def test_near_rain_none_on_clear_day(self):
+        """No hours with notable probability → near_rain_hour is None."""
+        hours = _day_of(n_hours=8)
+        result = score(hours, _window())
+        assert result.near_rain_hour is None
+        assert result.near_rain_prob is None
+
+    def test_near_rain_none_when_hour_is_gated(self):
+        """Hour above RAIN_PROB_GATE is already gated — near_rain should not fire for it."""
+        hours = [_hour(h=h, precip_prob=0.0) for h in range(8, 12)]
+        hours.append(_hour(h=12, precip_prob=80.0))  # gated
+        hours += [_hour(h=h, precip_prob=0.0) for h in range(13, 16)]
+        result = score(hours, _window(hang=8, bring_in=15, dusk=20))
+        # The 80% hour is gated — shown via window_rain_hour, not near_rain_hour
+        assert result.near_rain_hour is None
+        assert result.window_rain_hour == 12

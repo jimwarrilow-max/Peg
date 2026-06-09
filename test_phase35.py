@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from log import write_outcome, append_prediction, read_band
+from log import write_outcome, append_prediction, read_band, recent_accuracy
 from scorer import Band, HourForecast, ScoreResult, WindowConfig, round_display
 
 
@@ -186,11 +186,12 @@ class TestOutcomeProcessor:
         with patch.dict(os.environ, {"TELEGRAM_TOKEN": "fake-token"}), \
              patch("outcome.get_updates", return_value=updates), \
              patch("outcome.answer_callback"), \
+             patch("outcome.send"), \
              patch("outcome.OFFSET_FILE", offset_path), \
              patch("outcome.write_outcome", side_effect=lambda d, o: write_outcome(d, o, log_path=log_path)):
             outcome.main()
 
-    @pytest.mark.parametrize("outcome", ["dry", "damp"])
+    @pytest.mark.parametrize("outcome", ["dry", "damp", "skip"])
     def test_response_written_to_log(self, outcome, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-30"])
         updates = [_make_callback_update(101, f"{outcome}:2026-05-30")]
@@ -224,6 +225,65 @@ class TestOutcomeProcessor:
         log_path = _make_log(tmp_path, ["2026-05-30"])
         self._run_outcome([_make_callback_update(101, "dry:2026-05-28")], log_path, str(tmp_path / ".offset"))
         assert _read_log(log_path)[0]["outcome"] == ""
+
+    def test_confirmation_sent_after_outcome(self, tmp_path):
+        """A confirmation message is sent to the user after recording any outcome."""
+        import outcome
+        log_path    = _make_log(tmp_path, ["2026-05-30"])
+        offset_path = str(tmp_path / ".offset")
+        sent_confirms = []
+        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "fake-token"}), \
+             patch("outcome.get_updates", return_value=[_make_callback_update(101, "dry:2026-05-30")]), \
+             patch("outcome.answer_callback"), \
+             patch("outcome.send", side_effect=lambda msg, tok, cid: sent_confirms.append(cid)), \
+             patch("outcome.OFFSET_FILE", offset_path), \
+             patch("outcome.write_outcome", side_effect=lambda d, o: write_outcome(d, o, log_path=log_path)):
+            outcome.main()
+        assert sent_confirms == ["607945161"]
+
+
+# ---------------------------------------------------------------------------
+# evening.py — third outcome button
+# ---------------------------------------------------------------------------
+
+class TestEveningKeyboard:
+
+    def test_keyboard_has_three_buttons(self, tmp_path):
+        """Evening prompt keyboard includes Bone dry, Still damp, and Didn't hang."""
+        import evening
+        captured_keyboards = []
+        def fake_send_with_keyboard(msg, kb, token, chat_id):
+            captured_keyboards.append(kb)
+
+        from scorer import WindowConfig, ScoreResult
+        today = date.today().isoformat()
+        result = ScoreResult(
+            raw_score=75.0, display_score=75, band=Band.GOOD,
+            will_dry=True, override=False, best_window=(9, 14),
+            gust_flag=False, skipped=False,
+        )
+        cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
+        hours = [
+            HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
+                         wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
+                         precip_prob_pct=5.0)
+            for i in range(24)
+        ]
+        from log import append_prediction
+        log_path = str(tmp_path / "log.csv")
+        append_prediction(date.today(), result, cfg, hours, log_path=log_path)
+
+        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
+             patch("evening.read_band", return_value=Band.GOOD.value), \
+             patch("evening.send_with_keyboard", fake_send_with_keyboard):
+            evening.main()
+
+        assert len(captured_keyboards) == 1
+        buttons = captured_keyboards[0][0]
+        callback_datas = [b["callback_data"] for b in buttons]
+        assert any(d.startswith("dry:") for d in callback_datas)
+        assert any(d.startswith("damp:") for d in callback_datas)
+        assert any(d.startswith("skip:") for d in callback_datas)
 
 
 # ---------------------------------------------------------------------------
@@ -263,3 +323,154 @@ class TestNotifyExtensions:
 
         assert len(result) == 1
         assert result[0]["update_id"] == 1
+
+
+# ---------------------------------------------------------------------------
+# log.recent_accuracy
+# ---------------------------------------------------------------------------
+
+class TestRecentAccuracy:
+
+    def _log_with_outcomes(self, tmp_path, entries: list[tuple[str, str, str]]) -> str:
+        """entries: list of (date_str, band_value, outcome)"""
+        log_path = str(tmp_path / "log.csv")
+        for date_str, band_value, outcome in entries:
+            result = ScoreResult(
+                raw_score=75.0, display_score=75,
+                band=Band(band_value),
+                will_dry=True, override=False, best_window=(9, 14),
+                gust_flag=False, skipped=False,
+            )
+            cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
+            hours = [
+                HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
+                             wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
+                             precip_prob_pct=5.0)
+                for i in range(24)
+            ]
+            append_prediction(date.fromisoformat(date_str), result, cfg, hours, log_path=log_path)
+            if outcome:
+                write_outcome(date_str, outcome, log_path=log_path)
+        return log_path
+
+    def test_returns_none_when_no_file(self, tmp_path):
+        assert recent_accuracy(log_path=str(tmp_path / "nope.csv")) is None
+
+    def test_returns_none_when_fewer_than_3_results(self, tmp_path):
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-30", Band.GOOD.value, "dry"),
+            ("2026-05-31", Band.GOOD.value, "dry"),
+        ])
+        assert recent_accuracy(log_path=log_path) is None
+
+    def test_correct_when_good_and_dried(self, tmp_path):
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-28", Band.GOOD.value,  "dry"),
+            ("2026-05-29", Band.CRACK.value, "dry"),
+            ("2026-05-30", Band.GOOD.value,  "dry"),
+        ])
+        correct, total = recent_accuracy(log_path=log_path)
+        assert total == 3
+        assert correct == 3
+
+    def test_correct_when_marginal_and_damp(self, tmp_path):
+        """Marginal predicts it might not dry — outcome damp counts as correct."""
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-28", Band.MARGINAL.value, "damp"),
+            ("2026-05-29", Band.MARGINAL.value, "damp"),
+            ("2026-05-30", Band.GOOD.value,     "dry"),
+        ])
+        correct, total = recent_accuracy(log_path=log_path)
+        assert total == 3
+        assert correct == 3
+
+    def test_skip_outcomes_not_counted(self, tmp_path):
+        """Rows with outcome=='skip' are excluded from the accuracy calculation."""
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-28", Band.GOOD.value, "dry"),
+            ("2026-05-29", Band.GOOD.value, "skip"),   # excluded
+            ("2026-05-30", Band.GOOD.value, "dry"),
+            ("2026-05-31", Band.GOOD.value, "dry"),
+        ])
+        correct, total = recent_accuracy(log_path=log_path)
+        assert total == 3  # skip not counted
+        assert correct == 3
+
+    def test_limits_to_last_n_results(self, tmp_path):
+        """Only the last n=3 entries are considered."""
+        log_path = self._log_with_outcomes(tmp_path, [
+            ("2026-05-25", Band.GOOD.value, "damp"),  # old wrong
+            ("2026-05-26", Band.GOOD.value, "damp"),  # old wrong
+            ("2026-05-27", Band.GOOD.value, "damp"),  # old wrong
+            ("2026-05-28", Band.GOOD.value, "dry"),   # recent correct
+            ("2026-05-29", Band.GOOD.value, "dry"),   # recent correct
+            ("2026-05-30", Band.GOOD.value, "dry"),   # recent correct
+        ])
+        correct, total = recent_accuracy(n=3, log_path=log_path)
+        assert total == 3
+        assert correct == 3
+
+
+# ---------------------------------------------------------------------------
+# summary.py — _build_summary
+# ---------------------------------------------------------------------------
+
+class TestBuildSummary:
+
+    def _row(self, band: str, outcome: str) -> dict:
+        return {"date": "2026-05-30", "band": band, "outcome": outcome}
+
+    def test_returns_none_when_fewer_than_3_outcomes(self):
+        from summary import _build_summary
+        rows = [self._row(Band.GOOD.value, "dry"), self._row(Band.GOOD.value, "dry")]
+        assert _build_summary(rows) is None
+
+    def test_summary_contains_dry_and_damp_counts(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value,  "dry"),
+            self._row(Band.GOOD.value,  "dry"),
+            self._row(Band.GOOD.value,  "damp"),
+        ]
+        msg = _build_summary(rows)
+        assert msg is not None
+        assert "2 dry" in msg
+        assert "1 damp" in msg
+
+    def test_summary_shows_accuracy(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value,  "dry"),   # correct
+            self._row(Band.GOOD.value,  "dry"),   # correct
+            self._row(Band.GOOD.value,  "damp"),  # wrong
+        ]
+        msg = _build_summary(rows)
+        assert "2/3" in msg
+
+    def test_summary_shows_skip_count_when_nonzero(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "skip"),
+        ]
+        msg = _build_summary(rows)
+        assert "⏭️" in msg
+        assert "1" in msg
+
+    def test_skip_not_counted_as_outcome(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "skip"),
+            self._row(Band.GOOD.value, "skip"),
+        ]
+        # Only 1 outcome with dry/damp — not enough for summary
+        assert _build_summary(rows) is None
+
+    def test_html_bold_present(self):
+        from summary import _build_summary
+        rows = [self._row(Band.GOOD.value, "dry") for _ in range(3)]
+        msg = _build_summary(rows)
+        assert "<b>" in msg and "</b>" in msg
