@@ -409,3 +409,68 @@ class TestRecentAccuracy:
         correct, total = recent_accuracy(n=3, log_path=log_path)
         assert total == 3
         assert correct == 3
+
+
+# ---------------------------------------------------------------------------
+# summary.py — _build_summary
+# ---------------------------------------------------------------------------
+
+class TestBuildSummary:
+
+    def _row(self, band: str, outcome: str) -> dict:
+        return {"date": "2026-05-30", "band": band, "outcome": outcome}
+
+    def test_returns_none_when_fewer_than_3_outcomes(self):
+        from summary import _build_summary
+        rows = [self._row(Band.GOOD.value, "dry"), self._row(Band.GOOD.value, "dry")]
+        assert _build_summary(rows) is None
+
+    def test_summary_contains_dry_and_damp_counts(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value,  "dry"),
+            self._row(Band.GOOD.value,  "dry"),
+            self._row(Band.GOOD.value,  "damp"),
+        ]
+        msg = _build_summary(rows)
+        assert msg is not None
+        assert "2 dry" in msg
+        assert "1 damp" in msg
+
+    def test_summary_shows_accuracy(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value,  "dry"),   # correct
+            self._row(Band.GOOD.value,  "dry"),   # correct
+            self._row(Band.GOOD.value,  "damp"),  # wrong
+        ]
+        msg = _build_summary(rows)
+        assert "2/3" in msg
+
+    def test_summary_shows_skip_count_when_nonzero(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "skip"),
+        ]
+        msg = _build_summary(rows)
+        assert "⏭️" in msg
+        assert "1" in msg
+
+    def test_skip_not_counted_as_outcome(self):
+        from summary import _build_summary
+        rows = [
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, "skip"),
+            self._row(Band.GOOD.value, "skip"),
+        ]
+        # Only 1 outcome with dry/damp — not enough for summary
+        assert _build_summary(rows) is None
+
+    def test_html_bold_present(self):
+        from summary import _build_summary
+        rows = [self._row(Band.GOOD.value, "dry") for _ in range(3)]
+        msg = _build_summary(rows)
+        assert "<b>" in msg and "</b>" in msg
