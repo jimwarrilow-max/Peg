@@ -31,20 +31,20 @@ Most test value sits in the **pure scoring function**: deterministic, fast, hand
 
 ## 2. Unit tests — scoring function (baseline fixtures)
 
-*Sub-score curves: `vpd=clamp(VPD/1.0)`, `wind=clamp(0.25+mph/16)`, `solar=clamp(rad/450)`; `hourly=0.5·vpd+0.3·wind+0.2·solar` (×0 if rain-gated); `score=clamp(50·Σhourly/4.0,0,100)`.*
+*Sub-score curves: `vpd=clamp(VPD/1.0)`, `wind=clamp(0.10+0.9·mph/12)`, `solar=clamp(rad/450)`; `hourly=0.5·vpd+0.3·wind+0.2·solar` (×0 if rain-gated); `score=clamp(50·Σhourly/4.0,0,100)`.*
 
 | ID | Scenario | Key input | Expected |
 |---|---|---|---|
 | SCORE-01 | Perfect hour | vpd≥1.0, wind≥12mph, solar≥450 | hourly_potential = 1.0 |
-| SCORE-02 | Still-air floor | wind = 0 mph | wind sub-score = 0.25 (not 0) |
+| SCORE-02 | Still-air floor | wind = 0 mph | wind sub-score = 0.10 (not 0) |
 | SCORE-03 | Wind saturation | wind = 16 mph | wind sub-score clamps to 1.0 (not 1.25) |
 | SCORE-04 | VPD clamp | VPD = 1.5 kPa | vpd sub-score = 1.0 |
-| SCORE-05 | Weighted mix | vpd0.6 / wind8mph / solar225 | hourly = 0.625 |
+| SCORE-05 | Weighted mix | vpd0.6 / wind8mph / solar225 | hourly = 0.61 |
 | SCORE-06 | Meets towel bar | 4 perfect hours | cumulative 4.0 → score 50 → Marginal → will_dry true |
 | SCORE-07 | 2× margin | 8 perfect hours | cumulative 8.0 → score clamps to 100 → Crack open pegs |
 | SCORE-08 | will_dry boundary | cumulative 3.99 vs 4.00 | false vs true |
 | SCORE-09 | Rain gate (hour) | hour with precip_prob 60% | that hour's potential = 0 regardless of other fields |
-| SCORE-10 | Rain gate boundary | precip_prob = 50% / 51%; precip = 0.2 / 0.21 mm | 50% & 0.2 not gated; 51% & 0.21 gated (`>` rule) |
+| SCORE-10 | Rain gate boundary | precip_prob = 40% / 41%; precip = 0.2 / 0.21 mm | 40% & 0.2 not gated; 41% & 0.21 gated (`>` rule) |
 | SCORE-11 | All-day rain | every hour gated | cumulative 0 → score 0 → Tumble-dryer |
 | SCORE-12 | Rain beats everything | high VPD + wind but precip_prob 70% | hour potential 0 (rain dominates) |
 | SCORE-13 | Rounding | raw 72.3 / 73.0 | displays 70 / 75 |

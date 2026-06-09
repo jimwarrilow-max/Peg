@@ -16,6 +16,7 @@ unreliable in live testing — returned 0 despite real humidity).
 from __future__ import annotations
 
 import json
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -76,8 +77,10 @@ def transform(data: dict, day_index: int = 0) -> tuple[list[HourForecast], int, 
     try:
         sunrise_str: str = data["daily"]["sunrise"][day_index]
         sunrise_hour = int(sunrise_str[11:13])
-    except (KeyError, IndexError, TypeError, ValueError):
-        sunrise_hour = 0  # absent or malformed → no restriction
+    except (KeyError, IndexError, TypeError, ValueError) as exc:
+        # Degrade rather than fail the daily forecast, but make it visible.
+        print(f"Warning: could not parse sunrise ({exc}) — pre-dawn gating disabled.", file=sys.stderr)
+        sunrise_hour = 0
 
     # --- Hourly arrays ------------------------------------------------------
     hourly = data.get("hourly", {})

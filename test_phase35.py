@@ -141,6 +141,7 @@ class TestEveningGating:
 
         with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
              patch("evening.read_band", return_value=band.value), \
+             patch("evening.recent_accuracy", return_value=None), \
              patch("evening.send_with_keyboard", fake_send_with_keyboard):
             evening.main()
         return sent_to
@@ -275,6 +276,7 @@ class TestEveningKeyboard:
 
         with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
              patch("evening.read_band", return_value=Band.GOOD.value), \
+             patch("evening.recent_accuracy", return_value=None), \
              patch("evening.send_with_keyboard", fake_send_with_keyboard):
             evening.main()
 

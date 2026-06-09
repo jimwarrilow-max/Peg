@@ -15,10 +15,8 @@ import sys
 from datetime import date, timedelta
 
 import config
-from notify import NotifyError, broadcast, send
-from scorer import Band
-
-LOG_PATH = "log.csv"
+from log import LOG_PATH, prediction_correct
+from notify import broadcast, send
 
 
 def _last_week_rows() -> list[dict]:
@@ -52,15 +50,10 @@ def _build_summary(rows: list[dict]) -> str | None:
     if total_with_outcome < 3:
         return None
 
-    # Directional accuracy: GOOD/CRACK + dry OR TUMBLE/MARGINAL + damp = correct
-    _positive = {Band.GOOD.value, Band.CRACK.value}
     correct = sum(
         1 for r in rows
         if r.get("outcome") in ("dry", "damp")
-        and (
-            (r.get("band") in _positive and r["outcome"] == "dry") or
-            (r.get("band") not in _positive and r["outcome"] == "damp")
-        )
+        and prediction_correct(r.get("band", ""), r["outcome"])
     )
 
     skip_line = f", {skips} didn't hang ⏭️" if skips else ""
