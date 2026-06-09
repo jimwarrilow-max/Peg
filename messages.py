@@ -55,12 +55,12 @@ def _conditions_line(result: ScoreResult) -> str:
 def _rain_line(result: ScoreResult, hang_hour: int) -> str:
     if result.window_rain_hour is None:
         return ""
-    prob_str = f"{int(result.window_rain_prob or 0)}%"
+    prob_str = f" ({int(result.window_rain_prob)}%)" if result.window_rain_prob is not None else ""
     if result.window_rain_hour <= hang_hour:
-        return f"\n🌧️ Rain from {_fmt_hour(result.window_rain_hour)} ({prob_str})"
+        return f"\n🌧️ Rain from {_fmt_hour(result.window_rain_hour)}{prob_str}"
     return (
         f"\n🌧️ Dry till {_fmt_hour(result.window_rain_hour - 1)}"
-        f" · Rain from {_fmt_hour(result.window_rain_hour)} ({prob_str})"
+        f" · Rain from {_fmt_hour(result.window_rain_hour)}{prob_str}"
     )
 
 
@@ -80,13 +80,10 @@ def format_message(
     if result.skipped:
         return SKIPPED_MSG
 
-    score    = result.display_score
-    hang_str = _fmt_hour(hang_hour)
-
-    window_end = min(bring_in_hour, dusk_hour)
-    cond     = _conditions_line(result)
-    rain     = _rain_line(result, hang_hour)
-    uv       = _uv_line(result)
+    score = result.display_score
+    cond  = _conditions_line(result)
+    rain       = _rain_line(result, hang_hour)
+    uv         = _uv_line(result)
 
     if result.override:
         # Use the first rain in the full window for the headline timing.
@@ -107,31 +104,39 @@ def format_message(
             f"{cond}{rain}{uv}"
         )
 
+    # Recommended hang and bring-in times from the best scoring window
+    window_end = min(bring_in_hour, dusk_hour)
+    start_hour = result.best_window[0] if result.best_window else hang_hour
     end_hour   = result.best_window[1] if result.best_window else window_end
+    start_str  = _fmt_hour(start_hour)
     dry_by_str = _fmt_hour(end_hour)
+    # "Out by 9am" when window starts at the earliest possible time; "Hold off till 1pm" otherwise
+    hang_advice = f"Out by {start_str}" if start_hour == hang_hour else f"Hold off till {start_str}"
 
     if result.band == Band.CRACK:
         cold = result.mean_temp_c is not None and result.mean_temp_c < _COLD_GLOAT_THRESHOLD_C
         gloat = _GLOAT_LINE if cold else ""
         return (
             f"🧺 <b>Peg here. Tomorrow's a belter — {score}/100.</b> "
-            f"Out by {hang_str} and it'll be crisp by {dry_by_str}.{gloat}"
+            f"{hang_advice} — it'll be crisp by {dry_by_str}.{gloat}"
             f"{cond}{rain}{uv}"
         )
 
     if result.band == Band.GOOD:
         return (
             f"🧺 <b>Peg's verdict: {score}/100. A solid one.</b> "
-            f"Out by {hang_str}, in by {dry_by_str}. "
+            f"{hang_advice}, in by {dry_by_str}. "
             f"Won't break records, but it'll get the job done."
             f"{cond}{rain}{uv}"
         )
 
     if result.band == Band.MARGINAL:
+        window_tip = f" Best window: {start_str}–{dry_by_str}." if result.best_window else ""
         return (
             f"🧺 <b>Peg's on the fence — {score}/100.</b> "
             f"It'll <i>probably</i> dry if you're about to dash it in, "
             f"but the heavy stuff might sulk. I'd risk a light load, not the towels."
+            f"{window_tip}"
             f"{cond}{rain}{uv}"
         )
 

@@ -121,6 +121,22 @@ class TestFormatMessage:
         )
         assert "65" in msg
 
+    def test_override_timing_uses_window_rain_hour(self):
+        """Override headline uses window_rain_hour (full window) when available."""
+        msg = format_message(
+            _result(override=True, band=Band.MARGINAL, window_rain_hour=15, first_rain_hour=17),
+            9, 18, 21,
+        )
+        assert "3pm" in msg
+
+    def test_override_timing_falls_back_to_first_rain_hour(self):
+        """Override headline falls back to first_rain_hour when window_rain_hour is absent."""
+        msg = format_message(
+            _result(override=True, band=Band.MARGINAL, window_rain_hour=None, first_rain_hour=17),
+            9, 18, 21,
+        )
+        assert "5pm" in msg
+
     def test_conditions_line_present(self):
         """All non-skipped messages include temperature, wind, and humidity."""
         msg = format_message(_result(raw_score=75.0, band=Band.GOOD), 9, 18, 21)
@@ -136,6 +152,24 @@ class TestFormatMessage:
         )
         assert "🌧️" in msg
         assert "70%" in msg
+
+    def test_rain_line_shows_dry_till_prefix_when_rain_after_hang_hour(self):
+        """'Dry till X · Rain from Y' format when rain arrives after hang hour."""
+        msg = format_message(
+            _result(raw_score=65.0, band=Band.GOOD, window_rain_hour=15, window_rain_prob=70.0),
+            9, 18, 21,
+        )
+        assert "Dry till 2pm" in msg
+        assert "Rain from 3pm" in msg
+
+    def test_rain_line_omits_probability_when_prob_none(self):
+        """Rain gated by mm threshold only (prob=None) → no probability shown."""
+        msg = format_message(
+            _result(raw_score=65.0, band=Band.GOOD, window_rain_hour=15, window_rain_prob=None),
+            9, 18, 21,
+        )
+        assert "🌧️" in msg
+        assert "(%" not in msg   # no parenthetical probability on the rain line
 
     def test_rain_line_absent_when_no_rain(self):
         """No rain line on a clear day."""
@@ -159,6 +193,26 @@ class TestFormatMessage:
         )
         assert "Good drying day" not in msg
         assert "Crack open the pegs" not in msg
+
+    def test_hang_advice_out_by_when_window_starts_at_hang_hour(self):
+        """best_window starts at hang_hour → 'Out by 9am'."""
+        msg = format_message(_result(raw_score=85.0, band=Band.CRACK, best_window=(9, 14)), 9, 18, 21)
+        assert "Out by 9am" in msg
+
+    def test_hang_advice_hold_off_when_window_starts_late(self):
+        """best_window starts after hang_hour → 'Hold off till 1pm'."""
+        msg = format_message(_result(raw_score=65.0, band=Band.GOOD, best_window=(13, 17)), 9, 18, 21)
+        assert "Hold off till 1pm" in msg
+        assert "in by 5pm" in msg
+
+    def test_marginal_window_tip_present_when_best_window_exists(self):
+        msg = format_message(_result(raw_score=45.0, band=Band.MARGINAL, best_window=(11, 15)), 9, 18, 21)
+        assert "11am" in msg
+        assert "3pm" in msg
+
+    def test_marginal_no_window_tip_when_best_window_none(self):
+        msg = format_message(_result(raw_score=40.0, band=Band.MARGINAL, best_window=None), 9, 18, 21)
+        assert "Best window" not in msg
 
     def test_cold_gloat_appended_on_cold_crack_day(self):
         """Cold + Crack → gloat line appended."""
@@ -274,6 +328,20 @@ class TestLog:
             date(2026, 5, 30), _result(), _cfg(), _hours(temp_c=15.0), tmp_path
         )
         assert float(rows[0]["mean_temp_c"]) == pytest.approx(15.0)
+
+    def test_window_stats_all_fields_written(self, tmp_path):
+        """All _window_stats fields (mean and peak) are present and non-empty in the log row."""
+        rows, _ = self._write_and_read(
+            date(2026, 5, 30), _result(), _cfg(), _hours(temp_c=15.0), tmp_path
+        )
+        row = rows[0]
+        # _hours: temp_c=15.0, rh_pct=60.0, vpd_kpa=0.7, wind_mph=8.0, solar_wm2=300.0
+        assert float(row["mean_temp_c"])    == pytest.approx(15.0)
+        assert float(row["mean_rh_pct"])    == pytest.approx(60.0)
+        assert float(row["mean_vpd_kpa"])   == pytest.approx(0.7)
+        assert float(row["mean_wind_mph"])  == pytest.approx(8.0)
+        assert float(row["mean_solar_wm2"]) == pytest.approx(300.0)
+        assert row["max_uv_index"] == ""    # _hours sets no uv_index → None → empty
 
     def test_best_window_formatted(self, tmp_path):
         rows, _ = self._write_and_read(
