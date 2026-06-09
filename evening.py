@@ -35,8 +35,9 @@ def main() -> None:
         print(f"Peg said don't bother today — skipping evening prompt.")
         return
     keyboard = [[
-        {"text": "👍 Bone dry",   "callback_data": f"dry:{today}"},
-        {"text": "👎 Still damp", "callback_data": f"damp:{today}"},
+        {"text": "👍 Bone dry",      "callback_data": f"dry:{today}"},
+        {"text": "👎 Still damp",    "callback_data": f"damp:{today}"},
+        {"text": "⏭️ Didn't hang",  "callback_data": f"skip:{today}"},
     ]]
 
     prompt = (

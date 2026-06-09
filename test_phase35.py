@@ -186,11 +186,12 @@ class TestOutcomeProcessor:
         with patch.dict(os.environ, {"TELEGRAM_TOKEN": "fake-token"}), \
              patch("outcome.get_updates", return_value=updates), \
              patch("outcome.answer_callback"), \
+             patch("outcome.send"), \
              patch("outcome.OFFSET_FILE", offset_path), \
              patch("outcome.write_outcome", side_effect=lambda d, o: write_outcome(d, o, log_path=log_path)):
             outcome.main()
 
-    @pytest.mark.parametrize("outcome", ["dry", "damp"])
+    @pytest.mark.parametrize("outcome", ["dry", "damp", "skip"])
     def test_response_written_to_log(self, outcome, tmp_path):
         log_path = _make_log(tmp_path, ["2026-05-30"])
         updates = [_make_callback_update(101, f"{outcome}:2026-05-30")]
@@ -224,6 +225,65 @@ class TestOutcomeProcessor:
         log_path = _make_log(tmp_path, ["2026-05-30"])
         self._run_outcome([_make_callback_update(101, "dry:2026-05-28")], log_path, str(tmp_path / ".offset"))
         assert _read_log(log_path)[0]["outcome"] == ""
+
+    def test_confirmation_sent_after_outcome(self, tmp_path):
+        """A confirmation message is sent to the user after recording any outcome."""
+        import outcome
+        log_path    = _make_log(tmp_path, ["2026-05-30"])
+        offset_path = str(tmp_path / ".offset")
+        sent_confirms = []
+        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "fake-token"}), \
+             patch("outcome.get_updates", return_value=[_make_callback_update(101, "dry:2026-05-30")]), \
+             patch("outcome.answer_callback"), \
+             patch("outcome.send", side_effect=lambda msg, tok, cid: sent_confirms.append(cid)), \
+             patch("outcome.OFFSET_FILE", offset_path), \
+             patch("outcome.write_outcome", side_effect=lambda d, o: write_outcome(d, o, log_path=log_path)):
+            outcome.main()
+        assert sent_confirms == ["607945161"]
+
+
+# ---------------------------------------------------------------------------
+# evening.py — third outcome button
+# ---------------------------------------------------------------------------
+
+class TestEveningKeyboard:
+
+    def test_keyboard_has_three_buttons(self, tmp_path):
+        """Evening prompt keyboard includes Bone dry, Still damp, and Didn't hang."""
+        import evening
+        captured_keyboards = []
+        def fake_send_with_keyboard(msg, kb, token, chat_id):
+            captured_keyboards.append(kb)
+
+        from scorer import WindowConfig, ScoreResult
+        today = date.today().isoformat()
+        result = ScoreResult(
+            raw_score=75.0, display_score=75, band=Band.GOOD,
+            will_dry=True, override=False, best_window=(9, 14),
+            gust_flag=False, skipped=False,
+        )
+        cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
+        hours = [
+            HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
+                         wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
+                         precip_prob_pct=5.0)
+            for i in range(24)
+        ]
+        from log import append_prediction
+        log_path = str(tmp_path / "log.csv")
+        append_prediction(date.today(), result, cfg, hours, log_path=log_path)
+
+        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
+             patch("evening.read_band", return_value=Band.GOOD.value), \
+             patch("evening.send_with_keyboard", fake_send_with_keyboard):
+            evening.main()
+
+        assert len(captured_keyboards) == 1
+        buttons = captured_keyboards[0][0]
+        callback_datas = [b["callback_data"] for b in buttons]
+        assert any(d.startswith("dry:") for d in callback_datas)
+        assert any(d.startswith("damp:") for d in callback_datas)
+        assert any(d.startswith("skip:") for d in callback_datas)
 
 
 # ---------------------------------------------------------------------------

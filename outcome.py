@@ -15,10 +15,12 @@ import sys
 from pathlib import Path
 
 from log import write_outcome
-from notify import NotifyError, answer_callback, get_updates
+from notify import NotifyError, answer_callback, get_updates, send
 
 OFFSET_FILE = ".peg_offset"
-_VALID_OUTCOMES = {"dry", "damp"}
+_VALID_OUTCOMES = {"dry", "damp", "skip"}
+
+_CONFIRM_MSG = "Thanks — noted. Every answer makes Peg sharper 📊"
 
 
 def main() -> None:
@@ -63,6 +65,12 @@ def main() -> None:
             answer_callback(cq["id"], token)
         except NotifyError as exc:
             print(f"Could not acknowledge callback: {exc}", file=sys.stderr)
+
+        try:
+            chat_id = str(cq["from"]["id"])
+            send(_CONFIRM_MSG, token, chat_id)
+        except (NotifyError, KeyError) as exc:
+            print(f"Could not send confirmation: {exc}", file=sys.stderr)
 
     _save_offset(new_offset)
     print(f"Telegram offset advanced to {new_offset}.")
