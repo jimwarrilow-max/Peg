@@ -25,12 +25,19 @@
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
+  html {
+    overflow-x: hidden;
+    overflow-y: auto;
+    height: auto;
+  }
+
   body {
     font-family: 'Inter', -apple-system, sans-serif;
     background: var(--cream);
     color: var(--ink);
     line-height: 1.6;
-    overflow-x: hidden;
+    overflow-x: clip;
+    min-height: 100%;
   }
 
   h1, h2, h3, .display { font-family: 'Fraunces', Georgia, serif; }
