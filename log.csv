@@ -10,3 +10,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-06-07,9,18,21,100.0,100,Crack open the pegs,True,False,False,False,09:00-14:00,16.76,65.2,0.682,15.11,425.3,4.0,
 2026-06-08,9,18,21,11.76,10,Tumble-dryer weather,False,True,False,False,,13.97,56.6,0.71,12.22,441.4,4.4,
 2026-06-11,9,18,21,0.0,0,Tumble-dryer weather,False,True,True,False,,13.44,93.3,0.111,15.37,161.0,1.9,
+2026-06-12,9,18,21,66.6,65,Good drying day,True,False,False,False,11:00-18:00,17.32,75.0,0.536,14.98,341.8,4.2,
