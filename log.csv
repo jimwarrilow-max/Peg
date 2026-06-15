@@ -14,3 +14,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-06-13,9,18,21,100.0,100,Crack open the pegs,True,False,False,False,13:00-16:00,16.94,50.4,0.969,13.03,632.0,5.5,
 2026-06-14,9,18,21,93.27,95,Crack open the pegs,True,False,False,False,14:00-18:00,15.73,59.9,0.728,7.44,512.9,4.2,
 2026-06-15,9,18,21,100.0,100,Crack open the pegs,True,False,False,False,13:00-17:00,18.93,65.8,0.807,10.96,508.6,5.2,
+2026-06-16,9,18,21,88.44,90,Marginal,True,True,False,False,10:00-14:00,19.43,66.1,0.785,9.78,368.4,4.9,
