@@ -1,0 +1,53 @@
+name: Peg — capture outcomes
+
+# The evening prompt (peg-evening.yml) fires at 18:30 UTC with the 👍/👎/⏭️
+# buttons.  Telegram only retains a tapped reply for ~24h, so we poll often
+# across the evening (when most answers come in) and the following morning.
+# Frequent polling also means the button spinner clears and the "noted"
+# confirmation arrives within minutes of a tap, not a day later.
+
+on:
+  schedule:
+    - cron: '*/30 18-23,5-9 * * *'
+  workflow_dispatch:   # manual "Run now" from the Actions tab
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+# Never let two polls race on the log.csv / .peg_offset commit.
+concurrency:
+  group: peg-outcome
+  cancel-in-progress: false
+
+jobs:
+  capture:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to commit the outcome + offset
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Process pending outcomes
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+        run: python outcome.py
+
+      - name: Commit log and offset
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add log.csv .peg_offset
+          if git diff --staged --quiet; then
+            echo "Nothing to commit."
+          else
+            git commit -m "outcome: $(date -u +%Y-%m-%dT%H:%MZ)"
+            git pull --rebase
+            git push
+          fi
