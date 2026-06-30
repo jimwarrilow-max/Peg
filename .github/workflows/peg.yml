@@ -25,11 +25,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Process yesterday's outcome
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        run: python outcome.py
-
+      # Outcome capture lives in its own frequent workflow (peg-outcome.yml).
       - name: Send evening forecast
         env:
           TELEGRAM_TOKEN:     ${{ secrets.TELEGRAM_TOKEN }}
