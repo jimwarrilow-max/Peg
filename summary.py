@@ -68,32 +68,50 @@ def _build_summary(rows: list[dict]) -> str | None:
 
 def _build_alert(rows: list[dict]) -> str | None:
     """
-    Health check: if Peg made several answerable drying calls this week but
-    not one outcome came back, the feedback buttons are probably broken.
-    Return a warning to send, or None if the loop looks healthy.
+    Health check: if the 3 most recent answerable days all went unanswered,
+    the feedback buttons are probably broken — even if earlier days in the
+    week were answered fine (a loop that dies mid-week must not be masked
+    by a healthy-looking Monday and Tuesday).
 
-    TUMBLE days are excluded — they get no evening prompt, so a missing
-    outcome there is expected, not a fault.
+    TUMBLE days are excluded via is_answerable — they get no evening
+    prompt, so a missing outcome there is expected, not a fault.
     """
     answerable = [r for r in rows if is_answerable(r.get("band"))]
-    recorded   = [r for r in answerable if r.get("outcome") in VALID_OUTCOMES]
+    recent     = answerable[-3:]
 
-    if len(answerable) >= 3 and not recorded:
+    if len(recent) >= 3 and all(r.get("outcome") not in VALID_OUTCOMES for r in recent):
         return (
             f"🔧 <b>Peg's feedback loop looks broken.</b>\n"
-            f"{len(answerable)} drying days this week, but no 👍/👎 answers came "
-            f"back. The buttons may not be reaching me — worth a check."
+            f"The last {len(recent)} drying days got no 👍/👎 answer. "
+            f"The buttons may not be reaching me — worth a check."
         )
     return None
 
 
+def _health_line(rows: list[dict]) -> str:
+    """One-line ops footer: is Peg doing its job, at a glance."""
+    answerable = [r for r in rows if is_answerable(r.get("band"))]
+    answered   = [r for r in answerable if r.get("outcome") in VALID_OUTCOMES]
+    return (
+        f"🩺 {len(rows)}/7 forecasts logged · "
+        f"{len(answered)}/{len(answerable)} prompts answered"
+    )
+
+
 def main() -> None:
     rows = _last_week_rows()
-    msg  = _build_summary(rows) or _build_alert(rows)
 
-    if msg is None:
+    # The alert is deliberately NOT a fallback: a loop that breaks mid-week
+    # must fire the alert even when there are enough early-week outcomes
+    # for a normal summary.
+    parts = [p for p in (_build_summary(rows), _build_alert(rows)) if p]
+
+    if not parts:
         print("Not enough outcomes to summarise — skipping.")
         return
+
+    parts.append(_health_line(rows))
+    msg = "\n\n".join(parts)
 
     print(msg)
 

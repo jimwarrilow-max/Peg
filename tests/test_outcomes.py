@@ -522,3 +522,45 @@ class TestBuildAlert:
             _summary_row(Band.GOOD.value, ""),
         ]
         assert _build_alert(rows) is None
+
+    def test_alerts_when_loop_dies_mid_week(self):
+        """Early-week answers must not mask a loop that broke on Wednesday."""
+        from summary import _build_alert
+        rows = [_summary_row(Band.GOOD.value, "dry") for _ in range(3)] + \
+               [_summary_row(Band.GOOD.value, "") for _ in range(3)]
+        msg = _build_alert(rows)
+        assert msg is not None
+        assert "broken" in msg.lower()
+
+    def test_recent_answer_keeps_alert_silent_despite_old_gaps(self):
+        from summary import _build_alert
+        rows = [_summary_row(Band.GOOD.value, "") for _ in range(3)] + \
+               [_summary_row(Band.GOOD.value, "damp")]
+        assert _build_alert(rows) is None
+
+
+# ---------------------------------------------------------------------------
+# summary.py — _health_line and main() composition
+# ---------------------------------------------------------------------------
+
+class TestHealthLine:
+
+    def test_counts_forecasts_and_answers(self):
+        from summary import _health_line
+        rows = [
+            _summary_row(Band.GOOD.value,   "dry"),
+            _summary_row(Band.GOOD.value,   ""),
+            _summary_row(Band.TUMBLE.value, ""),      # not answerable
+            _summary_row(Band.CRACK.value,  "skip"),
+        ]
+        line = _health_line(rows)
+        assert "4/7 forecasts logged" in line
+        assert "2/3 prompts answered" in line
+
+    def test_summary_and_alert_can_send_together(self):
+        """A mid-week breakage sends the normal summary AND the alert."""
+        from summary import _build_summary, _build_alert
+        rows = [_summary_row(Band.GOOD.value, "dry") for _ in range(3)] + \
+               [_summary_row(Band.GOOD.value, "") for _ in range(3)]
+        assert _build_summary(rows) is not None
+        assert _build_alert(rows) is not None

@@ -1,0 +1,38 @@
+name: Peg — failure alert
+
+# A dead system can't report itself through its own code paths, so this
+# watcher lives outside them: whenever any production Peg workflow finishes
+# in failure, it pushes the bad news straight to Telegram — where failures
+# actually get seen — instead of leaving a red ✗ buried in the Actions tab.
+
+on:
+  workflow_run:
+    workflows:
+      - "Peg — evening forecast"
+      - "Peg — evening outcome prompt"
+      - "Peg — capture outcomes"
+      - "Peg — weekly summary"
+    types: [completed]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  alert:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send Telegram failure alert
+        env:
+          TOKEN:    ${{ secrets.TELEGRAM_TOKEN }}
+          CHAT_ID:  ${{ secrets.TELEGRAM_CHAT_ID }}
+          RUN_NAME: ${{ github.event.workflow_run.name }}
+          RUN_URL:  ${{ github.event.workflow_run.html_url }}
+        run: |
+          curl -sS --fail-with-body -X POST \
+            "https://api.telegram.org/bot${TOKEN}/sendMessage" \
+            -d chat_id="${CHAT_ID}" \
+            -d parse_mode=HTML \
+            --data-urlencode text="🔧 <b>Peg run failed:</b> ${RUN_NAME}
+          ${RUN_URL}"
