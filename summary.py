@@ -15,9 +15,8 @@ import sys
 from datetime import date, timedelta
 
 import config
-from log import LOG_PATH, prediction_correct
+from log import LOG_PATH, VALID_OUTCOMES, is_answerable, prediction_correct
 from notify import broadcast, send
-from scorer import Band
 
 
 def _last_week_rows() -> list[dict]:
@@ -76,8 +75,8 @@ def _build_alert(rows: list[dict]) -> str | None:
     TUMBLE days are excluded — they get no evening prompt, so a missing
     outcome there is expected, not a fault.
     """
-    answerable = [r for r in rows if r.get("band") != Band.TUMBLE.value]
-    recorded   = [r for r in answerable if r.get("outcome") in ("dry", "damp", "skip")]
+    answerable = [r for r in rows if is_answerable(r.get("band"))]
+    recorded   = [r for r in answerable if r.get("outcome") in VALID_OUTCOMES]
 
     if len(answerable) >= 3 and not recorded:
         return (

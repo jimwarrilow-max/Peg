@@ -1,0 +1,31 @@
+name: Commit log files
+description: >
+  Commit and push Peg's state files (log.csv, .peg_offset) if they changed.
+  Single owner of the commit/rebase/push sequence — peg.yml and
+  peg-outcome.yml both use this. These commits also keep the schedulers
+  alive (prevents GitHub's 60-day auto-disable).
+
+inputs:
+  prefix:
+    description: "Commit message prefix (e.g. 'log' or 'outcome')"
+    required: true
+  files:
+    description: "Files to stage"
+    default: "log.csv .peg_offset"
+
+runs:
+  using: composite
+  steps:
+    - name: Commit and push if changed
+      shell: bash
+      run: |
+        git config user.name  "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add ${{ inputs.files }}
+        if git diff --staged --quiet; then
+          echo "Nothing to commit."
+        else
+          git commit -m "${{ inputs.prefix }}: $(date -u +%Y-%m-%dT%H:%MZ)"
+          git pull --rebase
+          git push
+        fi

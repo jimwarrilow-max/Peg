@@ -417,22 +417,24 @@ class TestRecentAccuracy:
 # summary.py — _build_summary
 # ---------------------------------------------------------------------------
 
-class TestBuildSummary:
+def _summary_row(band: str, outcome: str) -> dict:
+    """A minimal log row as summary.py's builders read it."""
+    return {"date": "2026-05-30", "band": band, "outcome": outcome}
 
-    def _row(self, band: str, outcome: str) -> dict:
-        return {"date": "2026-05-30", "band": band, "outcome": outcome}
+
+class TestBuildSummary:
 
     def test_returns_none_when_fewer_than_3_outcomes(self):
         from summary import _build_summary
-        rows = [self._row(Band.GOOD.value, "dry"), self._row(Band.GOOD.value, "dry")]
+        rows = [_summary_row(Band.GOOD.value, "dry"), _summary_row(Band.GOOD.value, "dry")]
         assert _build_summary(rows) is None
 
     def test_summary_contains_dry_and_damp_counts(self):
         from summary import _build_summary
         rows = [
-            self._row(Band.GOOD.value,  "dry"),
-            self._row(Band.GOOD.value,  "dry"),
-            self._row(Band.GOOD.value,  "damp"),
+            _summary_row(Band.GOOD.value,  "dry"),
+            _summary_row(Band.GOOD.value,  "dry"),
+            _summary_row(Band.GOOD.value,  "damp"),
         ]
         msg = _build_summary(rows)
         assert msg is not None
@@ -442,9 +444,9 @@ class TestBuildSummary:
     def test_summary_shows_accuracy(self):
         from summary import _build_summary
         rows = [
-            self._row(Band.GOOD.value,  "dry"),   # correct
-            self._row(Band.GOOD.value,  "dry"),   # correct
-            self._row(Band.GOOD.value,  "damp"),  # wrong
+            _summary_row(Band.GOOD.value,  "dry"),   # correct
+            _summary_row(Band.GOOD.value,  "dry"),   # correct
+            _summary_row(Band.GOOD.value,  "damp"),  # wrong
         ]
         msg = _build_summary(rows)
         assert "2/3" in msg
@@ -452,10 +454,10 @@ class TestBuildSummary:
     def test_summary_shows_skip_count_when_nonzero(self):
         from summary import _build_summary
         rows = [
-            self._row(Band.GOOD.value, "dry"),
-            self._row(Band.GOOD.value, "dry"),
-            self._row(Band.GOOD.value, "dry"),
-            self._row(Band.GOOD.value, "skip"),
+            _summary_row(Band.GOOD.value, "dry"),
+            _summary_row(Band.GOOD.value, "dry"),
+            _summary_row(Band.GOOD.value, "dry"),
+            _summary_row(Band.GOOD.value, "skip"),
         ]
         msg = _build_summary(rows)
         assert "⏭️" in msg
@@ -464,16 +466,16 @@ class TestBuildSummary:
     def test_skip_not_counted_as_outcome(self):
         from summary import _build_summary
         rows = [
-            self._row(Band.GOOD.value, "dry"),
-            self._row(Band.GOOD.value, "skip"),
-            self._row(Band.GOOD.value, "skip"),
+            _summary_row(Band.GOOD.value, "dry"),
+            _summary_row(Band.GOOD.value, "skip"),
+            _summary_row(Band.GOOD.value, "skip"),
         ]
         # Only 1 outcome with dry/damp — not enough for summary
         assert _build_summary(rows) is None
 
     def test_html_bold_present(self):
         from summary import _build_summary
-        rows = [self._row(Band.GOOD.value, "dry") for _ in range(3)]
+        rows = [_summary_row(Band.GOOD.value, "dry") for _ in range(3)]
         msg = _build_summary(rows)
         assert "<b>" in msg and "</b>" in msg
 
@@ -484,12 +486,9 @@ class TestBuildSummary:
 
 class TestBuildAlert:
 
-    def _row(self, band: str, outcome: str) -> dict:
-        return {"date": "2026-05-30", "band": band, "outcome": outcome}
-
     def test_alerts_when_drying_days_have_no_outcomes(self):
         from summary import _build_alert
-        rows = [self._row(Band.GOOD.value, "") for _ in range(3)]
+        rows = [_summary_row(Band.GOOD.value, "") for _ in range(3)]
         msg = _build_alert(rows)
         assert msg is not None
         assert "broken" in msg.lower()
@@ -497,29 +496,29 @@ class TestBuildAlert:
     def test_silent_when_an_outcome_was_recorded(self):
         from summary import _build_alert
         rows = [
-            self._row(Band.GOOD.value, "dry"),
-            self._row(Band.GOOD.value, ""),
-            self._row(Band.GOOD.value, ""),
+            _summary_row(Band.GOOD.value, "dry"),
+            _summary_row(Band.GOOD.value, ""),
+            _summary_row(Band.GOOD.value, ""),
         ]
         assert _build_alert(rows) is None
 
     def test_silent_below_threshold(self):
         from summary import _build_alert
-        rows = [self._row(Band.GOOD.value, "") for _ in range(2)]
+        rows = [_summary_row(Band.GOOD.value, "") for _ in range(2)]
         assert _build_alert(rows) is None
 
     def test_tumble_days_excluded_from_count(self):
         from summary import _build_alert
         # 2 answerable (no outcome) + 3 TUMBLE (never prompted) → below threshold.
-        rows = [self._row(Band.GOOD.value, "") for _ in range(2)] + \
-               [self._row(Band.TUMBLE.value, "") for _ in range(3)]
+        rows = [_summary_row(Band.GOOD.value, "") for _ in range(2)] + \
+               [_summary_row(Band.TUMBLE.value, "") for _ in range(3)]
         assert _build_alert(rows) is None
 
     def test_skip_counts_as_a_recorded_answer(self):
         from summary import _build_alert
         rows = [
-            self._row(Band.GOOD.value, "skip"),
-            self._row(Band.GOOD.value, ""),
-            self._row(Band.GOOD.value, ""),
+            _summary_row(Band.GOOD.value, "skip"),
+            _summary_row(Band.GOOD.value, ""),
+            _summary_row(Band.GOOD.value, ""),
         ]
         assert _build_alert(rows) is None
