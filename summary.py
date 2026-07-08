@@ -17,6 +17,7 @@ from datetime import date, timedelta
 import config
 from log import LOG_PATH, prediction_correct
 from notify import broadcast, send
+from scorer import Band
 
 
 def _last_week_rows() -> list[dict]:
@@ -66,9 +67,30 @@ def _build_summary(rows: list[dict]) -> str | None:
     )
 
 
+def _build_alert(rows: list[dict]) -> str | None:
+    """
+    Health check: if Peg made several answerable drying calls this week but
+    not one outcome came back, the feedback buttons are probably broken.
+    Return a warning to send, or None if the loop looks healthy.
+
+    TUMBLE days are excluded — they get no evening prompt, so a missing
+    outcome there is expected, not a fault.
+    """
+    answerable = [r for r in rows if r.get("band") != Band.TUMBLE.value]
+    recorded   = [r for r in answerable if r.get("outcome") in ("dry", "damp", "skip")]
+
+    if len(answerable) >= 3 and not recorded:
+        return (
+            f"🔧 <b>Peg's feedback loop looks broken.</b>\n"
+            f"{len(answerable)} drying days this week, but no 👍/👎 answers came "
+            f"back. The buttons may not be reaching me — worth a check."
+        )
+    return None
+
+
 def main() -> None:
-    rows   = _last_week_rows()
-    msg    = _build_summary(rows)
+    rows = _last_week_rows()
+    msg  = _build_summary(rows) or _build_alert(rows)
 
     if msg is None:
         print("Not enough outcomes to summarise — skipping.")

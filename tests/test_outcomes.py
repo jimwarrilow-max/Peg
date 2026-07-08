@@ -476,3 +476,50 @@ class TestBuildSummary:
         rows = [self._row(Band.GOOD.value, "dry") for _ in range(3)]
         msg = _build_summary(rows)
         assert "<b>" in msg and "</b>" in msg
+
+
+# ---------------------------------------------------------------------------
+# summary.py — _build_alert (feedback-loop health check)
+# ---------------------------------------------------------------------------
+
+class TestBuildAlert:
+
+    def _row(self, band: str, outcome: str) -> dict:
+        return {"date": "2026-05-30", "band": band, "outcome": outcome}
+
+    def test_alerts_when_drying_days_have_no_outcomes(self):
+        from summary import _build_alert
+        rows = [self._row(Band.GOOD.value, "") for _ in range(3)]
+        msg = _build_alert(rows)
+        assert msg is not None
+        assert "broken" in msg.lower()
+
+    def test_silent_when_an_outcome_was_recorded(self):
+        from summary import _build_alert
+        rows = [
+            self._row(Band.GOOD.value, "dry"),
+            self._row(Band.GOOD.value, ""),
+            self._row(Band.GOOD.value, ""),
+        ]
+        assert _build_alert(rows) is None
+
+    def test_silent_below_threshold(self):
+        from summary import _build_alert
+        rows = [self._row(Band.GOOD.value, "") for _ in range(2)]
+        assert _build_alert(rows) is None
+
+    def test_tumble_days_excluded_from_count(self):
+        from summary import _build_alert
+        # 2 answerable (no outcome) + 3 TUMBLE (never prompted) → below threshold.
+        rows = [self._row(Band.GOOD.value, "") for _ in range(2)] + \
+               [self._row(Band.TUMBLE.value, "") for _ in range(3)]
+        assert _build_alert(rows) is None
+
+    def test_skip_counts_as_a_recorded_answer(self):
+        from summary import _build_alert
+        rows = [
+            self._row(Band.GOOD.value, "skip"),
+            self._row(Band.GOOD.value, ""),
+            self._row(Band.GOOD.value, ""),
+        ]
+        assert _build_alert(rows) is None

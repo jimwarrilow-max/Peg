@@ -10,6 +10,12 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+# Shared with peg-outcome.yml: both workflows commit log.csv, and a
+# concurrent commit race loses one side's push. Serialise them.
+concurrency:
+  group: peg-commit
+  cancel-in-progress: false
+
 jobs:
   forecast:
     runs-on: ubuntu-latest
@@ -25,11 +31,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Process yesterday's outcome
-        env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        run: python outcome.py
-
+      # Outcome capture lives in its own frequent workflow (peg-outcome.yml).
       - name: Send evening forecast
         env:
           TELEGRAM_TOKEN:     ${{ secrets.TELEGRAM_TOKEN }}
@@ -37,13 +39,13 @@ jobs:
           TELEGRAM_CHAT_ID_2: ${{ secrets.TELEGRAM_CHAT_ID_2 }}
         run: python run.py
 
-      - name: Commit log and offset
+      - name: Commit log
         # This commit keeps the scheduler alive (prevents 60-day auto-disable).
-        # It's a no-op if neither file changed (e.g. on a same-day re-run).
+        # It's a no-op if the log didn't change (e.g. on a same-day re-run).
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add log.csv .peg_offset
+          git add log.csv
           if git diff --staged --quiet; then
             echo "Nothing to commit."
           else
