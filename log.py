@@ -25,6 +25,21 @@ from scorer import Band, HourForecast, ScoreResult, WindowConfig
 
 LOG_PATH = "log.csv"
 
+# The full set of outcomes a user can record via the evening buttons.
+# Single owner — evening.py, outcome.py and summary.py all import this.
+VALID_OUTCOMES = ("dry", "damp", "skip")
+
+
+def is_answerable(band: Optional[str]) -> bool:
+    """
+    True if a day with this band gets an evening outcome prompt.
+    TUMBLE days don't — asking "did it dry?" when Peg said "don't bother"
+    is a non-sequitur. Single owner of the rule, shared by evening.py
+    (whether to send the prompt) and summary.py (whether a missing outcome
+    counts as a fault).
+    """
+    return band != Band.TUMBLE.value
+
 _COLUMNS = [
     "date",
     "hang_hour", "bring_in_hour", "dusk_hour",

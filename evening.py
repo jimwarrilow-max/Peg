@@ -13,9 +13,8 @@ import sys
 from datetime import date
 
 import config
-from log import read_band, recent_accuracy
+from log import is_answerable, read_band, recent_accuracy
 from notify import broadcast, send_with_keyboard
-from scorer import Band
 
 
 def main() -> None:
@@ -31,8 +30,8 @@ def main() -> None:
     if band is None:
         print(f"No prediction logged for {today} — skipping evening prompt.")
         return
-    if band == Band.TUMBLE.value:
-        print(f"Peg said don't bother today — skipping evening prompt.")
+    if not is_answerable(band):
+        print("Peg said don't bother today — skipping evening prompt.")
         return
     keyboard = [[
         {"text": "👍 Bone dry",      "callback_data": f"dry:{today}"},

@@ -14,11 +14,10 @@ import os
 import sys
 from pathlib import Path
 
-from log import write_outcome
+from log import VALID_OUTCOMES, write_outcome
 from notify import NotifyError, answer_callback, get_updates, send
 
 OFFSET_FILE = ".peg_offset"
-_VALID_OUTCOMES = {"dry", "damp", "skip"}
 
 _CONFIRM_MSG = "Thanks — noted. Every answer makes Peg sharper 📊"
 
@@ -51,7 +50,7 @@ def main() -> None:
 
         data = cq.get("data", "")
         parts = data.split(":", 1)
-        if len(parts) != 2 or parts[0] not in _VALID_OUTCOMES:
+        if len(parts) != 2 or parts[0] not in VALID_OUTCOMES:
             continue
 
         outcome, date_str = parts
