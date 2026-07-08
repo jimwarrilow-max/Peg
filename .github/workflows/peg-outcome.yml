@@ -8,15 +8,19 @@ name: Peg — capture outcomes
 
 on:
   schedule:
-    - cron: '*/30 18-23,5-9 * * *'
+    # Every 30 min through the evening (when taps arrive), hourly in the
+    # morning as a catch-up sweep.
+    - cron: '*/30 18-23 * * *'
+    - cron: '0 5-9 * * *'
   workflow_dispatch:   # manual "Run now" from the Actions tab
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
-# Never let two polls race on the log.csv / .peg_offset commit.
+# Shared with peg.yml: both workflows commit log.csv, and a concurrent
+# commit race loses one side's push (rebase conflict on adjacent rows).
 concurrency:
-  group: peg-outcome
+  group: peg-commit
   cancel-in-progress: false
 
 jobs:
@@ -29,15 +33,12 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
+      # outcome.py is stdlib-only, so the runner's preinstalled python3 is
+      # enough — no setup-python on a job that runs this often.
       - name: Process pending outcomes
         env:
           TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-        run: python outcome.py
+        run: python3 outcome.py
 
       - name: Commit log and offset
         run: |

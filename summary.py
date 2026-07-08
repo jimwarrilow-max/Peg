@@ -89,11 +89,8 @@ def _build_alert(rows: list[dict]) -> str | None:
 
 
 def main() -> None:
-    rows   = _last_week_rows()
-    msg    = _build_summary(rows)
-
-    if msg is None:
-        msg = _build_alert(rows)
+    rows = _last_week_rows()
+    msg  = _build_summary(rows) or _build_alert(rows)
 
     if msg is None:
         print("Not enough outcomes to summarise — skipping.")
