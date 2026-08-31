@@ -89,3 +89,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-08-29,9,18,20,0.0,0,Tumble-dryer weather,False,True,False,False,,16.54,92.0,0.151,10.65,121.0,2.1,
 2026-08-30,9,18,20,24.56,25,Tumble-dryer weather,False,True,False,False,,18.25,74.0,0.562,12.1,329.5,3.1,
 2026-08-31,9,18,19,20.22,20,Tumble-dryer weather,False,True,False,False,,17.09,74.5,0.504,11.74,254.8,2.5,
+2026-09-01,9,18,19,97.89,100,Crack open the pegs,True,False,False,False,13:00-17:00,17.67,62.7,0.777,9.49,353.9,3.2,
