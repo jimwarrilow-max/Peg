@@ -92,3 +92,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-09-01,9,18,19,97.89,100,Crack open the pegs,True,False,False,False,13:00-17:00,17.67,62.7,0.777,9.49,353.9,3.2,
 2026-09-02,9,18,19,0.0,0,Tumble-dryer weather,False,True,False,False,,17.35,90.7,0.19,13.48,139.5,1.9,
 2026-09-03,9,18,19,100.0,100,Crack open the pegs,True,False,False,False,14:00-18:00,20.18,63.2,0.888,13.6,325.2,2.7,
+2026-09-04,9,18,19,98.67,100,Crack open the pegs,True,False,False,False,12:00-16:00,17.44,62.9,0.759,15.12,374.9,3.7,
