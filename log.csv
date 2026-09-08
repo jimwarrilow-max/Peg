@@ -97,3 +97,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-09-06,9,18,19,72.54,75,Good drying day,True,False,False,False,13:00-16:00,20.45,58.3,1.067,11.17,432.7,3.9,
 2026-09-07,9,18,19,88.84,90,Crack open the pegs,True,False,False,False,13:00-17:00,18.93,58.5,0.915,11.63,347.9,3.2,
 2026-09-08,9,18,19,98.41,100,Crack open the pegs,True,False,False,False,12:00-16:00,15.82,60.6,0.725,12.59,339.1,3.5,
+2026-09-09,9,18,19,82.61,85,Crack open the pegs,True,False,False,False,12:00-17:00,14.95,65.9,0.588,9.45,279.2,2.6,
