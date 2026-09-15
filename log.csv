@@ -104,3 +104,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-09-13,9,18,19,55.08,55,Good drying day,True,False,False,False,12:00-18:00,19.58,78.7,0.514,4.49,210.7,2.8,
 2026-09-14,9,18,19,46.91,45,Marginal,False,False,False,False,,19.45,83.1,0.41,9.5,200.0,2.7,
 2026-09-15,9,18,19,53.79,55,Marginal,True,False,False,False,14:00-18:00,17.35,62.1,0.762,11.93,295.9,3.0,
+2026-09-16,9,18,19,66.88,65,Good drying day,True,False,False,False,11:00-18:00,15.53,67.0,0.597,10.19,228.5,1.9,
