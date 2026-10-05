@@ -61,7 +61,7 @@ Prints the verdict to stdout. Telegram is skipped if `TELEGRAM_TOKEN` / `TELEGRA
 | `fetch.py` | Open-Meteo fetch and transform |
 | `messages.py` | Telegram message templates (Peg's voice) |
 | `notify.py` | Telegram transport |
-| `log.py` | CSV prediction log |
+| `prediction_log.py` | Prediction Log — the only code that reads or writes `log.csv` |
 | `run.py` | Daily entrypoint |
 | `config.py` | Set-once location and times |
 | `log.csv` | Prediction history (committed daily) |

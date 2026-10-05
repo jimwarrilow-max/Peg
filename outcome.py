@@ -14,15 +14,18 @@ import os
 import sys
 from pathlib import Path
 
-from log import VALID_OUTCOMES, write_outcome
+from datetime import date
+
 from notify import NotifyError, answer_callback, get_updates, send
+from prediction_log import Outcome, PredictionLog
 
 OFFSET_FILE = ".peg_offset"
 
 _CONFIRM_MSG = "Thanks — noted. Every answer makes Peg sharper 📊"
 
 
-def main() -> None:
+def main(log: PredictionLog | None = None) -> None:
+    log = log or PredictionLog()
     token = os.environ.get("TELEGRAM_TOKEN")
     if not token:
         print("TELEGRAM_TOKEN not set — skipping outcome processing.")
@@ -50,12 +53,12 @@ def main() -> None:
 
         data = cq.get("data", "")
         parts = data.split(":", 1)
-        if len(parts) != 2 or parts[0] not in VALID_OUTCOMES:
+        if len(parts) != 2 or parts[0] not in {o.value for o in Outcome}:
             continue
 
         outcome, date_str = parts
 
-        if write_outcome(date_str, outcome):
+        if _record(log, date_str, Outcome(outcome)):
             print(f"Outcome recorded: {date_str} → {outcome}")
         else:
             print(f"No log row for {date_str} — outcome not recorded.")
@@ -73,6 +76,15 @@ def main() -> None:
 
     _save_offset(new_offset)
     print(f"Telegram offset advanced to {new_offset}.")
+
+
+def _record(log: PredictionLog, date_str: str, outcome: Outcome) -> bool:
+    """Store the Outcome; False if the date is unreadable or has no Day."""
+    try:
+        day = date.fromisoformat(date_str)
+    except ValueError:
+        return False
+    return log.record_outcome(day, outcome)
 
 
 def _load_offset() -> int:

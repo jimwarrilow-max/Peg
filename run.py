@@ -18,13 +18,14 @@ from datetime import date, timedelta, timezone
 
 import config
 from fetch import FetchError, fetch_forecast
-from log import append_prediction
+from prediction_log import PredictionLog
 from messages import SKIPPED_MSG, format_message
 from notify import NotifyError, broadcast, send
 from scorer import WindowConfig, score
 
 
-def main() -> None:
+def main(log: PredictionLog | None = None) -> None:
+    log = log or PredictionLog()
     print("Peg is checking the forecast…")
 
     # --- Fetch -----------------------------------------------------------
@@ -63,7 +64,7 @@ def main() -> None:
 
     # --- Log -------------------------------------------------------------
     tomorrow = date.today() + timedelta(days=1)
-    append_prediction(tomorrow, result, cfg, hours)
+    log.record(tomorrow, result, cfg, hours)
     print(f"Log: row written for {tomorrow}.")
 
 
