@@ -72,6 +72,18 @@ class TestEveningGating:
         log = _make_log(tmp_path, [date.today().isoformat()], band=Band.TUMBLE)
         assert self._run_evening(log) == []
 
+    @pytest.mark.parametrize("band", [Band.CRACK, Band.GOOD, Band.MARGINAL])
+    def test_prompt_names_today_and_its_band(self, band, tmp_path):
+        """The question must not be confused with tomorrow's forecast (#43)."""
+        import evening
+        prompts = []
+        log = _make_log(tmp_path, [date.today().isoformat()], band=band)
+        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
+             patch("evening.send_with_keyboard", lambda msg, kb, tok, cid: prompts.append(msg)):
+            evening.main(log)
+        assert "Today's washing" in prompts[0]
+        assert band.value in prompts[0]
+
     def test_skips_prompt_when_no_log_entry(self, tmp_path):
         log = _make_log(tmp_path, ["2026-05-30"])
         assert self._run_evening(log) == []

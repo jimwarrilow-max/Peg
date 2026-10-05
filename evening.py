@@ -1,7 +1,7 @@
 """
 Peg — evening outcome prompt.
 
-Sends a Telegram message with 👍/👎 inline buttons so the user can record
+Sends a Telegram message, naming today and its Band, with buttons so the user can record
 whether the washing actually dried.  The callback_data encodes today's date
 so outcome.py knows which log row to update.
 """
@@ -42,8 +42,12 @@ def main(log: PredictionLog | None = None) -> None:
 
     acc = log.recent_accuracy()
     acc_line = f"\n(Peg's been right {acc[0]} of the last {acc[1]} times 🎯)" if acc else ""
+    # Name the day and repeat its verdict: this arrives soon after the
+    # forecast for TOMORROW, and must not be confused with it.
+    said_line = f"Yesterday I said today would be: <i>{day.band.value}</i>.\n" if day.band else ""
     prompt = (
-        f"<b>Evening! How'd I do — did it dry?</b>\n"
+        f"<b>Today's washing — did it dry?</b>\n"
+        f"{said_line}"
         f"Honest answers make me sharper.{acc_line}"
     )
 
