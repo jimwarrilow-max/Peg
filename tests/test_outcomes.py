@@ -1,5 +1,5 @@
 """
-Tests for Phase 3.5: outcome capture (evening.py, outcome.py, log.write_outcome).
+Tests for outcome capture and reporting: evening.py, outcome.py, summary.py.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from log import write_outcome, append_prediction, read_band, recent_accuracy
+from prediction_log import Day, Outcome, PredictionLog
 from scorer import Band, HourForecast, ScoreResult, WindowConfig, round_display
 
 
@@ -22,105 +22,9 @@ from scorer import Band, HourForecast, ScoreResult, WindowConfig, round_display
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _make_log(tmp_path, dates: list[str]) -> str:
-    log_path = str(tmp_path / "log.csv")
+def _make_log(tmp_path, dates: list[str], band: Band = Band.GOOD) -> PredictionLog:
+    log = PredictionLog(str(tmp_path / "log.csv"))
     for d in dates:
-        result = ScoreResult(
-            raw_score=75.0, display_score=75, band=Band.GOOD,
-            will_dry=True, override=False, best_window=(9, 14),
-            gust_flag=False, skipped=False,
-        )
-        cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
-        hours = [
-            HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
-                         wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
-                         precip_prob_pct=5.0)
-            for i in range(24)
-        ]
-        append_prediction(date.fromisoformat(d), result, cfg, hours, log_path=log_path)
-    return log_path
-
-
-def _read_log(log_path: str) -> list[dict]:
-    with open(log_path, newline="") as f:
-        return list(csv.DictReader(f))
-
-
-# ---------------------------------------------------------------------------
-# log.write_outcome
-# ---------------------------------------------------------------------------
-
-class TestWriteOutcome:
-
-    @pytest.mark.parametrize("outcome", ["dry", "damp"])
-    def test_writes_outcome(self, outcome, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        result = write_outcome("2026-05-30", outcome, log_path=log_path)
-        assert result is True
-        assert _read_log(log_path)[0]["outcome"] == outcome
-
-    def test_returns_false_for_missing_date(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        assert write_outcome("2026-05-31", "dry", log_path=log_path) is False
-
-    def test_returns_false_for_missing_file(self, tmp_path):
-        assert write_outcome("2026-05-30", "dry", log_path=str(tmp_path / "nope.csv")) is False
-
-    def test_only_target_row_updated(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-29", "2026-05-30", "2026-05-31"])
-        write_outcome("2026-05-30", "dry", log_path=log_path)
-        rows = _read_log(log_path)
-        assert rows[0]["outcome"] == ""    # 2026-05-29 untouched
-        assert rows[1]["outcome"] == "dry" # 2026-05-30 updated
-        assert rows[2]["outcome"] == ""    # 2026-05-31 untouched
-
-    def test_preserves_all_columns(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        before = _read_log(log_path)[0]
-        write_outcome("2026-05-30", "dry", log_path=log_path)
-        after = _read_log(log_path)[0]
-        for col in before:
-            if col != "outcome":
-                assert after[col] == before[col]
-
-    def test_outcome_can_be_overwritten(self, tmp_path):
-        """A delayed reply or correction can overwrite a previous outcome."""
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        write_outcome("2026-05-30", "dry",  log_path=log_path)
-        write_outcome("2026-05-30", "damp", log_path=log_path)
-        assert _read_log(log_path)[0]["outcome"] == "damp"
-
-
-# ---------------------------------------------------------------------------
-# log.read_band
-# ---------------------------------------------------------------------------
-
-class TestReadBand:
-
-    def test_returns_band_for_existing_date(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        assert read_band("2026-05-30", log_path=log_path) == Band.GOOD.value
-
-    def test_returns_none_for_missing_date(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        assert read_band("2026-05-31", log_path=log_path) is None
-
-    def test_returns_none_for_missing_file(self, tmp_path):
-        assert read_band("2026-05-30", log_path=str(tmp_path / "nope.csv")) is None
-
-
-# ---------------------------------------------------------------------------
-# evening.py — prompt gating
-# ---------------------------------------------------------------------------
-
-class TestEveningGating:
-
-    def _run_evening(self, log_path: str, tmp_path, band: Band = Band.GOOD) -> list[str]:
-        """Run evening.main() with a log entry for today; return sent chat_ids."""
-        import evening
-        from log import append_prediction
-        from scorer import WindowConfig
-        today = date.today().isoformat()
         result = ScoreResult(
             raw_score=75.0, display_score=75, band=band,
             will_dry=True, override=False, best_window=(9, 14),
@@ -133,35 +37,44 @@ class TestEveningGating:
                          precip_prob_pct=5.0)
             for i in range(24)
         ]
-        append_prediction(date.today(), result, cfg, hours, log_path=log_path)
+        log.record(date.fromisoformat(d), result, cfg, hours)
+    return log
 
+
+def _outcome(log: PredictionLog, iso: str):
+    return log.day(date.fromisoformat(iso)).outcome
+
+
+# ---------------------------------------------------------------------------
+# evening.py — prompt gating
+# ---------------------------------------------------------------------------
+
+class TestEveningGating:
+
+    def _run_evening(self, log: PredictionLog) -> list[str]:
+        """Run evening.main() against `log`; return the chat_ids sent to."""
+        import evening
         sent_to = []
         def fake_send_with_keyboard(msg, kb, token, chat_id):
             sent_to.append(chat_id)
 
         with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
-             patch("evening.read_band", return_value=band.value), \
-             patch("evening.recent_accuracy", return_value=None), \
              patch("evening.send_with_keyboard", fake_send_with_keyboard):
-            evening.main()
+            evening.main(log)
         return sent_to
 
     @pytest.mark.parametrize("band", [Band.CRACK, Band.GOOD, Band.MARGINAL])
     def test_sends_prompt_on_positive_bands(self, band, tmp_path):
-        sent = self._run_evening(str(tmp_path / "log.csv"), tmp_path, band=band)
-        assert sent == ["111"]
+        log = _make_log(tmp_path, [date.today().isoformat()], band=band)
+        assert self._run_evening(log) == ["111"]
 
     def test_skips_prompt_on_tumble(self, tmp_path):
-        sent = self._run_evening(str(tmp_path / "log.csv"), tmp_path, band=Band.TUMBLE)
-        assert sent == []
+        log = _make_log(tmp_path, [date.today().isoformat()], band=Band.TUMBLE)
+        assert self._run_evening(log) == []
 
     def test_skips_prompt_when_no_log_entry(self, tmp_path):
-        import evening
-        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
-             patch("evening.read_band", return_value=None), \
-             patch("evening.send_with_keyboard") as mock_send:
-            evening.main()
-        mock_send.assert_not_called()
+        log = _make_log(tmp_path, ["2026-05-30"])
+        assert self._run_evening(log) == []
 
 
 # ---------------------------------------------------------------------------
@@ -181,65 +94,62 @@ def _make_callback_update(update_id: int, callback_data: str) -> dict:
 
 class TestOutcomeProcessor:
 
-    def _run_outcome(self, updates: list, log_path: str, offset_path: str) -> None:
-        """Run outcome.main() with mocked Telegram and real log."""
+    def _run_outcome(self, updates: list, log: PredictionLog, offset_path: str, send=None) -> None:
+        """Run outcome.main() with mocked Telegram and a real temporary log."""
         import outcome
         with patch.dict(os.environ, {"TELEGRAM_TOKEN": "fake-token"}), \
              patch("outcome.get_updates", return_value=updates), \
              patch("outcome.answer_callback"), \
-             patch("outcome.send"), \
-             patch("outcome.OFFSET_FILE", offset_path), \
-             patch("outcome.write_outcome", side_effect=lambda d, o: write_outcome(d, o, log_path=log_path)):
-            outcome.main()
+             patch("outcome.send", side_effect=send), \
+             patch("outcome.OFFSET_FILE", offset_path):
+            outcome.main(log)
 
     @pytest.mark.parametrize("outcome", ["dry", "damp", "skip"])
     def test_response_written_to_log(self, outcome, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
+        log = _make_log(tmp_path, ["2026-05-30"])
         updates = [_make_callback_update(101, f"{outcome}:2026-05-30")]
-        self._run_outcome(updates, log_path, str(tmp_path / ".offset"))
-        assert _read_log(log_path)[0]["outcome"] == outcome
+        self._run_outcome(updates, log, str(tmp_path / ".offset"))
+        assert _outcome(log, "2026-05-30") == Outcome(outcome)
 
     def test_unknown_callback_data_ignored(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        self._run_outcome([_make_callback_update(101, "something_unexpected")], log_path, str(tmp_path / ".offset"))
-        assert _read_log(log_path)[0]["outcome"] == ""
+        log = _make_log(tmp_path, ["2026-05-30"])
+        self._run_outcome([_make_callback_update(101, "something_unexpected")], log, str(tmp_path / ".offset"))
+        assert _outcome(log, "2026-05-30") is None
+
+    def test_unreadable_date_ignored(self, tmp_path):
+        log = _make_log(tmp_path, ["2026-05-30"])
+        self._run_outcome([_make_callback_update(101, "dry:yesterday")], log, str(tmp_path / ".offset"))
+        assert _outcome(log, "2026-05-30") is None
 
     def test_no_updates_is_a_no_op(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        self._run_outcome([], log_path, str(tmp_path / ".offset"))
-        assert _read_log(log_path)[0]["outcome"] == ""
+        log = _make_log(tmp_path, ["2026-05-30"])
+        self._run_outcome([], log, str(tmp_path / ".offset"))
+        assert _outcome(log, "2026-05-30") is None
 
     def test_offset_advanced_after_processing(self, tmp_path):
-        log_path    = _make_log(tmp_path, ["2026-05-30"])
+        log         = _make_log(tmp_path, ["2026-05-30"])
         offset_path = str(tmp_path / ".offset")
-        self._run_outcome([_make_callback_update(200, "dry:2026-05-30")], log_path, offset_path)
+        self._run_outcome([_make_callback_update(200, "dry:2026-05-30")], log, offset_path)
         assert Path(offset_path).read_text().strip() == "201"
 
     def test_offset_not_advanced_on_no_updates(self, tmp_path):
-        log_path    = _make_log(tmp_path, ["2026-05-30"])
+        log         = _make_log(tmp_path, ["2026-05-30"])
         offset_path = str(tmp_path / ".offset")
         Path(offset_path).write_text("50")
-        self._run_outcome([], log_path, offset_path)
+        self._run_outcome([], log, offset_path)
         assert Path(offset_path).read_text().strip() == "50"
 
     def test_missing_log_row_does_not_crash(self, tmp_path):
-        log_path = _make_log(tmp_path, ["2026-05-30"])
-        self._run_outcome([_make_callback_update(101, "dry:2026-05-28")], log_path, str(tmp_path / ".offset"))
-        assert _read_log(log_path)[0]["outcome"] == ""
+        log = _make_log(tmp_path, ["2026-05-30"])
+        self._run_outcome([_make_callback_update(101, "dry:2026-05-28")], log, str(tmp_path / ".offset"))
+        assert _outcome(log, "2026-05-30") is None
 
     def test_confirmation_sent_after_outcome(self, tmp_path):
         """A confirmation message is sent to the user after recording any outcome."""
-        import outcome
-        log_path    = _make_log(tmp_path, ["2026-05-30"])
-        offset_path = str(tmp_path / ".offset")
+        log = _make_log(tmp_path, ["2026-05-30"])
         sent_confirms = []
-        with patch.dict(os.environ, {"TELEGRAM_TOKEN": "fake-token"}), \
-             patch("outcome.get_updates", return_value=[_make_callback_update(101, "dry:2026-05-30")]), \
-             patch("outcome.answer_callback"), \
-             patch("outcome.send", side_effect=lambda msg, tok, cid: sent_confirms.append(cid)), \
-             patch("outcome.OFFSET_FILE", offset_path), \
-             patch("outcome.write_outcome", side_effect=lambda d, o: write_outcome(d, o, log_path=log_path)):
-            outcome.main()
+        self._run_outcome([_make_callback_update(101, "dry:2026-05-30")], log, str(tmp_path / ".offset"),
+                          send=lambda msg, tok, cid: sent_confirms.append(cid))
         assert sent_confirms == ["607945161"]
 
 
@@ -256,33 +166,13 @@ class TestEveningKeyboard:
         def fake_send_with_keyboard(msg, kb, token, chat_id):
             captured_keyboards.append(kb)
 
-        from scorer import WindowConfig, ScoreResult
-        today = date.today().isoformat()
-        result = ScoreResult(
-            raw_score=75.0, display_score=75, band=Band.GOOD,
-            will_dry=True, override=False, best_window=(9, 14),
-            gust_flag=False, skipped=False,
-        )
-        cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
-        hours = [
-            HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
-                         wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
-                         precip_prob_pct=5.0)
-            for i in range(24)
-        ]
-        from log import append_prediction
-        log_path = str(tmp_path / "log.csv")
-        append_prediction(date.today(), result, cfg, hours, log_path=log_path)
-
+        log = _make_log(tmp_path, [date.today().isoformat()])
         with patch.dict(os.environ, {"TELEGRAM_TOKEN": "tok", "TELEGRAM_CHAT_ID": "111"}), \
-             patch("evening.read_band", return_value=Band.GOOD.value), \
-             patch("evening.recent_accuracy", return_value=None), \
              patch("evening.send_with_keyboard", fake_send_with_keyboard):
-            evening.main()
+            evening.main(log)
 
         assert len(captured_keyboards) == 1
-        buttons = captured_keyboards[0][0]
-        callback_datas = [b["callback_data"] for b in buttons]
+        callback_datas = [b["callback_data"] for b in captured_keyboards[0][0]]
         assert any(d.startswith("dry:") for d in callback_datas)
         assert any(d.startswith("damp:") for d in callback_datas)
         assert any(d.startswith("skip:") for d in callback_datas)
@@ -328,98 +218,12 @@ class TestNotifyExtensions:
 
 
 # ---------------------------------------------------------------------------
-# log.recent_accuracy
-# ---------------------------------------------------------------------------
-
-class TestRecentAccuracy:
-
-    def _log_with_outcomes(self, tmp_path, entries: list[tuple[str, str, str]]) -> str:
-        """entries: list of (date_str, band_value, outcome)"""
-        log_path = str(tmp_path / "log.csv")
-        for date_str, band_value, outcome in entries:
-            result = ScoreResult(
-                raw_score=75.0, display_score=75,
-                band=Band(band_value),
-                will_dry=True, override=False, best_window=(9, 14),
-                gust_flag=False, skipped=False,
-            )
-            cfg = WindowConfig(hang_hour=9, bring_in_hour=18, dusk_hour=21)
-            hours = [
-                HourForecast(hour=i, temp_c=18.0, rh_pct=60.0, vpd_kpa=0.7,
-                             wind_mph=8.0, solar_wm2=300.0, precip_mm=0.0,
-                             precip_prob_pct=5.0)
-                for i in range(24)
-            ]
-            append_prediction(date.fromisoformat(date_str), result, cfg, hours, log_path=log_path)
-            if outcome:
-                write_outcome(date_str, outcome, log_path=log_path)
-        return log_path
-
-    def test_returns_none_when_no_file(self, tmp_path):
-        assert recent_accuracy(log_path=str(tmp_path / "nope.csv")) is None
-
-    def test_returns_none_when_fewer_than_3_results(self, tmp_path):
-        log_path = self._log_with_outcomes(tmp_path, [
-            ("2026-05-30", Band.GOOD.value, "dry"),
-            ("2026-05-31", Band.GOOD.value, "dry"),
-        ])
-        assert recent_accuracy(log_path=log_path) is None
-
-    def test_correct_when_good_and_dried(self, tmp_path):
-        log_path = self._log_with_outcomes(tmp_path, [
-            ("2026-05-28", Band.GOOD.value,  "dry"),
-            ("2026-05-29", Band.CRACK.value, "dry"),
-            ("2026-05-30", Band.GOOD.value,  "dry"),
-        ])
-        correct, total = recent_accuracy(log_path=log_path)
-        assert total == 3
-        assert correct == 3
-
-    def test_correct_when_marginal_and_damp(self, tmp_path):
-        """Marginal predicts it might not dry — outcome damp counts as correct."""
-        log_path = self._log_with_outcomes(tmp_path, [
-            ("2026-05-28", Band.MARGINAL.value, "damp"),
-            ("2026-05-29", Band.MARGINAL.value, "damp"),
-            ("2026-05-30", Band.GOOD.value,     "dry"),
-        ])
-        correct, total = recent_accuracy(log_path=log_path)
-        assert total == 3
-        assert correct == 3
-
-    def test_skip_outcomes_not_counted(self, tmp_path):
-        """Rows with outcome=='skip' are excluded from the accuracy calculation."""
-        log_path = self._log_with_outcomes(tmp_path, [
-            ("2026-05-28", Band.GOOD.value, "dry"),
-            ("2026-05-29", Band.GOOD.value, "skip"),   # excluded
-            ("2026-05-30", Band.GOOD.value, "dry"),
-            ("2026-05-31", Band.GOOD.value, "dry"),
-        ])
-        correct, total = recent_accuracy(log_path=log_path)
-        assert total == 3  # skip not counted
-        assert correct == 3
-
-    def test_limits_to_last_n_results(self, tmp_path):
-        """Only the last n=3 entries are considered."""
-        log_path = self._log_with_outcomes(tmp_path, [
-            ("2026-05-25", Band.GOOD.value, "damp"),  # old wrong
-            ("2026-05-26", Band.GOOD.value, "damp"),  # old wrong
-            ("2026-05-27", Band.GOOD.value, "damp"),  # old wrong
-            ("2026-05-28", Band.GOOD.value, "dry"),   # recent correct
-            ("2026-05-29", Band.GOOD.value, "dry"),   # recent correct
-            ("2026-05-30", Band.GOOD.value, "dry"),   # recent correct
-        ])
-        correct, total = recent_accuracy(n=3, log_path=log_path)
-        assert total == 3
-        assert correct == 3
-
-
-# ---------------------------------------------------------------------------
 # summary.py — _build_summary
 # ---------------------------------------------------------------------------
 
-def _summary_row(band: str, outcome: str) -> dict:
-    """A minimal log row as summary.py's builders read it."""
-    return {"date": "2026-05-30", "band": band, "outcome": outcome}
+def _summary_row(band: str, outcome: str) -> Day:
+    """A Day as summary.py's builders read it."""
+    return Day(date(2026, 5, 30), Band(band), Outcome(outcome) if outcome else None)
 
 
 class TestBuildSummary:

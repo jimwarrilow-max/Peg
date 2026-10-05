@@ -13,11 +13,12 @@ import sys
 from datetime import date
 
 import config
-from log import is_answerable, read_band, recent_accuracy
 from notify import broadcast, send_with_keyboard
+from prediction_log import Outcome, PredictionLog
 
 
-def main() -> None:
+def main(log: PredictionLog | None = None) -> None:
+    log = log or PredictionLog()
     token    = os.environ.get("TELEGRAM_TOKEN")
     chat_ids = config.chat_ids()
 
@@ -26,20 +27,20 @@ def main() -> None:
         return
 
     today = date.today().isoformat()
-    band = read_band(today)
-    if band is None:
+    day = log.day(date.today())
+    if day is None:
         print(f"No prediction logged for {today} — skipping evening prompt.")
         return
-    if not is_answerable(band):
+    if not day.answerable:
         print("Peg said don't bother today — skipping evening prompt.")
         return
     keyboard = [[
-        {"text": "👍 Bone dry",      "callback_data": f"dry:{today}"},
-        {"text": "👎 Still damp",    "callback_data": f"damp:{today}"},
-        {"text": "⏭️ Didn't hang",  "callback_data": f"skip:{today}"},
+        {"text": "👍 Bone dry",      "callback_data": f"{Outcome.DRY.value}:{today}"},
+        {"text": "👎 Still damp",    "callback_data": f"{Outcome.DAMP.value}:{today}"},
+        {"text": "⏭️ Didn't hang",  "callback_data": f"{Outcome.SKIP.value}:{today}"},
     ]]
 
-    acc = recent_accuracy()
+    acc = log.recent_accuracy()
     acc_line = f"\n(Peg's been right {acc[0]} of the last {acc[1]} times 🎯)" if acc else ""
     prompt = (
         f"<b>Evening! How'd I do — did it dry?</b>\n"
