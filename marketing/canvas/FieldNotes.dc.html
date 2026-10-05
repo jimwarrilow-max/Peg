@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Peg — Field Notes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,600&amp;family=IBM+Plex+Mono:wght@400;600&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#4F6B3A}a:hover{color:#2F4423}
+.graph{background-color:#F1EEE6;background-image:linear-gradient(#E2DDD0 1px,transparent 1px),linear-gradient(90deg,#E2DDD0 1px,transparent 1px);background-size:24px 24px}
+</style>
+</helmet>
+<div class="graph" style="width: 1200px; height: 760px; box-sizing: border-box; padding: 64px; color: #1D2A22; font-family: 'IBM Plex Mono', monospace; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 64px">
+  <div style="display: flex; flex-direction: column; gap: 28px">
+    <div style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600">Direction D · Field Notes</div>
+    <div style="display: flex; align-items: center; gap: 20px">
+      <svg width="88" height="56" viewBox="0 0 88 56" aria-hidden="true">
+        <path d="M6 50 A38 38 0 0 1 82 50" fill="none" stroke="#1D2A22" stroke-width="3"></path>
+        <path d="M14 50 A30 30 0 0 1 30 24" fill="none" stroke="#C9C1AE" stroke-width="6"></path>
+        <path d="M44 20 A30 30 0 0 1 74 50" fill="none" stroke="{{accent}}" stroke-width="6"></path>
+        <line x1="44" y1="50" x2="66" y2="26" stroke="#1D2A22" stroke-width="3" stroke-linecap="round"></line>
+        <circle cx="44" cy="50" r="4" fill="#1D2A22"></circle>
+      </svg>
+      <div style="font-family: 'Newsreader', serif; font-weight: 600; font-size: 96px; line-height: 1; letter-spacing: -0.02em">Peg<span style="color: {{accent}}">.</span></div>
+    </div>
+    <h2 style="margin: 0; font-family: 'Newsreader', serif; font-weight: 400; font-size: 40px; line-height: 1.1">Drying, by the numbers.</h2>
+    <p style="margin: 0; font-family: 'Newsreader', serif; font-size: 20px; line-height: 1.5; max-width: 470px">For the weather-curious. Leads with the physics — vapour pressure deficit, wind, sun — and an honest record of how often Peg gets it right.</p>
+    <div style="margin-top: auto; border-top: 1px solid #1D2A22; padding-top: 20px; display: flex; flex-direction: column; gap: 6px">
+      <div style="font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 600">Launch line</div>
+      <div style="font-family: 'Newsreader', serif; font-size: 26px; font-style: italic">Not a guess. A forecast that keeps score.</div>
+    </div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 28px">
+    <div style="background: #FBFAF6; border: 1px solid #1D2A22; padding: 24px 28px; display: flex; flex-direction: column; gap: 14px">
+      <div style="display: flex; justify-content: space-between; font-size: 13px"><span>LOG · example day</span><span>score 84/100</span></div>
+      <div style="font-family: 'Newsreader', serif; font-weight: 600; font-size: 34px">Crack open the pegs</div>
+      <div style="font-size: 13px; line-height: 1.7; background: #EDE8DB; padding: 12px 14px">VPD = es(T) · (1 − RH/100)<br>hourly = 0.50·vpd + 0.30·wind + 0.20·solar</div>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; font-size: 13px">
+        <div><div style="color: #5A6358">window</div><div style="font-weight: 600; font-size: 16px">10am–4pm</div></div>
+        <div><div style="color: #5A6358">outcome</div><div style="font-weight: 600; font-size: 16px">[asked at 5pm]</div></div>
+        <div><div style="color: #5A6358">accuracy</div><div style="font-weight: 600; font-size: 16px">[YOUR %]</div></div>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 64px; background: #1D2A22"></div><div style="font-size: 12px; font-weight: 600">Ink</div><div style="font-size: 12px">#1D2A22</div></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 64px; background: #4F6B3A"></div><div style="font-size: 12px; font-weight: 600">Moss</div><div style="font-size: 12px">#4F6B3A</div></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 64px; background: #C2571A"></div><div style="font-size: 12px; font-weight: 600">Signal</div><div style="font-size: 12px">#C2571A</div></div>
+      <div style="display: flex; flex-direction: column; gap: 8px"><div style="height: 64px; background: #F1EEE6; border: 1px solid #1D2A22; box-sizing: border-box"></div><div style="font-size: 12px; font-weight: 600">Paper</div><div style="font-size: 12px">#F1EEE6</div></div>
+    </div>
+    <div style="display: flex; gap: 32px; align-items: flex-end; border-top: 1px solid #1D2A22; padding-top: 20px">
+      <div style="display: flex; flex-direction: column; gap: 4px"><div style="font-family: 'Newsreader', serif; font-weight: 600; font-size: 48px; line-height: 1">Aa</div><div style="font-size: 12px">Newsreader · display</div></div>
+      <div style="display: flex; flex-direction: column; gap: 4px"><div style="font-weight: 600; font-size: 44px; line-height: 1">Aa</div><div style="font-size: 12px">Plex Mono · data</div></div>
+      <div style="margin-left: auto; font-size: 12px; max-width: 210px; text-align: right">Gauge mark, graph paper, real formula on show.</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"accent":{"editor":"color","default":"#4F6B3A","options":["#4F6B3A","#C2571A","#3E7CA6","#1D2A22"]},"$preview":{"width":1200,"height":760}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { accent: this.props.accent ?? '#4F6B3A' };
+  }
+}
+</script>
+</body>
+</html>
