@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Peg — App icon</title>
+<script src="../support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Lilita+One&amp;family=Nunito:wght@500;700;800&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+a{color:#1B1B1B}a:hover{color:#B02A15}
+</style>
+</helmet>
+<div style="width: 1080px; height: 1080px; box-sizing: border-box; padding: 80px; background: #FBF6EE; color: #1B1B1B; font-family: 'Nunito', sans-serif; display: flex; flex-direction: column; gap: 56px; align-items: center">
+  <div style="font-size: 18px; letter-spacing: 0.14em; text-transform: uppercase; font-weight: 800; align-self: flex-start">App icon · avatar</div>
+  <div style="width: 560px; height: 560px; border-radius: 124px; background: {{ground}}; border: 6px solid #1B1B1B; box-sizing: border-box; display: flex; align-items: center; justify-content: center; box-shadow: 14px 14px 0 #1B1B1B; overflow: hidden; position: relative">
+    <svg width="560" height="560" viewBox="0 0 96 96" aria-hidden="true" style="position: absolute; inset: 0">
+      <path d="M-4 74 C 20 74, 30 56, 50 58 S 80 70, 100 46" fill="none" stroke="#1B1B1B" stroke-width="1.6" stroke-dasharray="4 3.5" stroke-linecap="round"></path>
+      <g transform="rotate(-14 48 42)">
+        <rect x="31" y="10" width="15" height="62" rx="7.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="3"></rect>
+        <rect x="50" y="10" width="15" height="62" rx="7.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="3"></rect>
+        <circle cx="48" cy="38" r="7.5" fill="{{ground}}" stroke="#1B1B1B" stroke-width="3"></circle>
+        <circle cx="38.5" cy="22" r="2.2" fill="#1B1B1B"></circle>
+        <circle cx="57.5" cy="22" r="2.2" fill="#1B1B1B"></circle>
+      </g>
+    </svg>
+  </div>
+  <div style="display: flex; gap: 48px; align-items: flex-end">
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+      <div style="width: 180px; height: 180px; border-radius: 40px; background: {{ground}}; border: 3px solid #1B1B1B; box-sizing: border-box; overflow: hidden">
+        <svg width="174" height="174" viewBox="0 0 96 96" aria-hidden="true"><g transform="rotate(-14 48 42)"><rect x="31" y="10" width="15" height="62" rx="7.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="3.5"></rect><rect x="50" y="10" width="15" height="62" rx="7.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="3.5"></rect><circle cx="48" cy="38" r="7.5" fill="{{ground}}" stroke="#1B1B1B" stroke-width="3.5"></circle></g></svg>
+      </div>
+      <div style="font-size: 18px; font-weight: 700">180</div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+      <div style="width: 96px; height: 96px; border-radius: 50%; background: {{ground}}; border: 3px solid #1B1B1B; box-sizing: border-box; overflow: hidden">
+        <svg width="90" height="90" viewBox="0 0 96 96" aria-hidden="true"><g transform="rotate(-14 48 46)"><rect x="31" y="14" width="15" height="62" rx="7.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="4.5"></rect><rect x="50" y="14" width="15" height="62" rx="7.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="4.5"></rect><circle cx="48" cy="42" r="7.5" fill="{{ground}}" stroke="#1B1B1B" stroke-width="4.5"></circle></g></svg>
+      </div>
+      <div style="font-size: 18px; font-weight: 700">Telegram avatar</div>
+    </div>
+    <div style="display: flex; flex-direction: column; align-items: center; gap: 12px">
+      <div style="width: 48px; height: 48px; border-radius: 12px; background: {{ground}}; border: 2px solid #1B1B1B; box-sizing: border-box; overflow: hidden">
+        <svg width="44" height="44" viewBox="0 0 96 96" aria-hidden="true"><g transform="rotate(-14 48 46)"><rect x="29" y="12" width="17" height="66" rx="8.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="6"></rect><rect x="50" y="12" width="17" height="66" rx="8.5" fill="{{accent}}" stroke="#1B1B1B" stroke-width="6"></rect></g></svg>
+      </div>
+      <div style="font-size: 18px; font-weight: 700">48</div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"ground":{"editor":"color","default":"#FFE58A","options":["#FFE58A","#BFE3C9","#DCEBF5"]},"accent":{"editor":"color","default":"#E8452C","options":["#E8452C","#3E7CA6","#7A9E6E"]},"$preview":{"width":1080,"height":1080}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return { ground: this.props.ground ?? '#FFE58A', accent: this.props.accent ?? '#E8452C' };
+  }
+}
+</script>
+</body>
+</html>
