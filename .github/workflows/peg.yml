@@ -1,11 +1,15 @@
 name: Peg — evening forecast
 
+# Started on time at 17:00 UK time by an outside scheduler (cron-job.org)
+# through workflow_dispatch — GitHub's own schedule often runs hours late.
+# See docs/scheduling.md.
 on:
+  workflow_dispatch:
   schedule:
-    # 16:00 UTC — arrives at 5pm BST (summer) or 4pm GMT (winter),
-    # early enough to load the washer for a morning hang.
-    - cron: '0 16 * * *'
-  workflow_dispatch:   # manual "Run now" from the Actions tab
+    # Backup only: if the outside scheduler did not run, this sends the
+    # forecast late rather than not at all. If the forecast was already
+    # sent, run.py stops without sending again.
+    - cron: '30 17 * * *'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true

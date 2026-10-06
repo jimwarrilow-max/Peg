@@ -1,10 +1,9 @@
 name: Peg — evening outcome prompt
 
+# Started at 19:30 UK time by an outside scheduler (cron-job.org) through
+# workflow_dispatch. No GitHub schedule: it often runs hours late, and once
+# ran after midnight and asked about the wrong day. See docs/scheduling.md.
 on:
-  schedule:
-    # 18:30 UTC — 19:30 BST (summer) / 18:30 GMT (winter).
-    # After the 18:00 bring-in time, giving the washing time to be assessed.
-    - cron: '30 18 * * *'
   workflow_dispatch:
 
 env:

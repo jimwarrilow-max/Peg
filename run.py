@@ -26,6 +26,15 @@ from scorer import WindowConfig, score
 
 def main(log: PredictionLog | None = None) -> None:
     log = log or PredictionLog()
+    tomorrow = date.today() + timedelta(days=1)
+
+    # Two schedulers may start this job (the outside scheduler, and GitHub's
+    # schedule as a backup). Whichever runs second finds tomorrow already
+    # recorded and stops, so the forecast is never sent twice.
+    if log.day(tomorrow) is not None:
+        print(f"Forecast for {tomorrow} already sent — nothing to do.")
+        return
+
     print("Peg is checking the forecast…")
 
     # --- Fetch -----------------------------------------------------------
@@ -63,7 +72,6 @@ def main(log: PredictionLog | None = None) -> None:
         print("Telegram: TELEGRAM_TOKEN / TELEGRAM_CHAT_ID not set — skipping send.")
 
     # --- Log -------------------------------------------------------------
-    tomorrow = date.today() + timedelta(days=1)
     log.record(tomorrow, result, cfg, hours)
     print(f"Log: row written for {tomorrow}.")
 

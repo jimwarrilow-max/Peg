@@ -6,9 +6,9 @@ Peg is a personal weather bot that tells you each morning whether today is a goo
 
 ## How it works
 
-Every morning at 06:45 GMT (07:45 BST), a GitHub Actions workflow:
+Every evening at 17:00 UK time, a GitHub Actions workflow (started by an outside scheduler — see `docs/scheduling.md`):
 
-1. Fetches today's hourly forecast from [Open-Meteo](https://open-meteo.com) for your location
+1. Fetches tomorrow's hourly forecast from [Open-Meteo](https://open-meteo.com) for your location
 2. Scores the drying conditions using a physics-based model (Vapour Pressure Deficit + wind + solar radiation)
 3. Sends a Telegram verdict
 4. Appends a prediction row to `log.csv` for later calibration
@@ -65,7 +65,7 @@ Prints the verdict to stdout. Telegram is skipped if `TELEGRAM_TOKEN` / `TELEGRA
 | `run.py` | Daily entrypoint |
 | `config.py` | Set-once location and times |
 | `log.csv` | Prediction history (committed daily) |
-| `.github/workflows/peg.yml` | Scheduler |
+| `.github/workflows/` | Scheduled jobs — see `docs/scheduling.md` |
 
 ## Tests
 
