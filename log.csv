@@ -147,3 +147,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-10-26,9,18,16,9.47,10,Tumble-dryer weather,False,False,True,False,,12.637,94.875,0.077,16.05,47.25,0.3,
 2026-10-27,9,18,16,63.66,65,Good drying day,True,False,True,False,11:00-16:00,11.625,67.375,0.449,14.812,253.25,1.1,
 2026-10-28,9,18,16,48.88,50,Marginal,False,False,False,False,,12.875,81.75,0.277,12.425,141.75,0.9,
+2026-10-29,9,18,16,40.51,40,Marginal,False,False,False,False,,12.9,80.375,0.304,5.725,212.625,0.9,
