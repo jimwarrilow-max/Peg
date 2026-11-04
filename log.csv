@@ -154,3 +154,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-11-02,9,18,16,49.5,50,Marginal,False,False,False,False,,9.225,75.125,0.295,11.713,149.25,0.8,
 2026-11-03,9,18,16,47.87,50,Marginal,False,False,False,False,,9.287,77.375,0.27,11.887,120.0,0.7,
 2026-11-04,9,18,16,49.37,50,Marginal,False,False,False,False,,9.275,76.25,0.28,12.6,127.875,0.6,
+2026-11-05,9,18,16,43.23,45,Marginal,False,False,False,False,,8.525,72.625,0.306,9.55,77.875,0.4,
