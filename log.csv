@@ -170,3 +170,4 @@ date,hang_hour,bring_in_hour,dusk_hour,raw_score,display_score,band,will_dry,ove
 2026-11-21,9,18,16,30.53,30,Tumble-dryer weather,False,False,False,False,,5.612,81.375,0.174,5.262,157.875,0.5,
 2026-11-22,9,18,16,44.16,45,Marginal,False,False,False,False,,6.35,77.25,0.221,11.188,120.75,0.4,
 2026-11-23,9,18,16,31.16,30,Tumble-dryer weather,False,False,False,False,,4.55,81.75,0.16,5.987,150.625,0.4,
+2026-11-25,9,18,16,43.0,45,Marginal,False,False,False,False,,4.012,74.625,0.21,10.275,143.625,0.4,
